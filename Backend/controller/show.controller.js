@@ -3,15 +3,52 @@ const { PrismaClient } = pkg;
 
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
+
 import redis from "../config/redis.js";
-const prisma = new PrismaClient();
 import { lockSeatsLua } from "../utils/seatLock.lua.js";
+
+const prisma = new PrismaClient();
 
 const LOCK_TTL_SECONDS = 300; // 5 mins
 const lockKey = (showId) => `lock:show:${showId}`;
 
-// GET /api/shows?movieId=xxx&date=2026-01-19
+// =====================================
+// ✅ Resume-ready Cache Versioning (Shows)
+// =====================================
+const SHOWS_CACHE_VERSION_KEY = "shows:cache:version";
 
+const getShowsCacheVersion = async () => {
+  const v = await redis.get(SHOWS_CACHE_VERSION_KEY);
+  if (!v) {
+    await redis.set(SHOWS_CACHE_VERSION_KEY, "1");
+    return "1";
+  }
+  return v;
+};
+
+const bumpShowsCacheVersion = async () => {
+  await redis.incr(SHOWS_CACHE_VERSION_KEY);
+};
+
+// =====================================
+// Cache Key Helpers
+// =====================================
+const showsByMovieAndDateKey = (version, movieId, date) =>
+  `shows:v${version}:movie=${movieId}:date=${date}`;
+
+const showBaseKey = (version, showId) => `shows:v${version}:base:${showId}`;
+
+const showsByMovieKey = (version, movieId) => `shows:v${version}:movie=${movieId}`;
+
+const showsByTheatreKey = (version, theatreId, date) =>
+  `shows:v${version}:theatre=${theatreId}:date=${date}`;
+
+const adminShowsKey = (version, limit, cursor) =>
+  `shows:v${version}:admin:list:limit=${limit}:cursor=${cursor || "null"}`;
+
+// =====================================
+// GET /api/shows?movieId=xxx&date=YYYY-MM-DD
+// =====================================
 export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   const { movieId, date } = req.query;
 
@@ -23,16 +60,28 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   const start = new Date(`${date}T00:00:00`);
   const end = new Date(`${date}T23:59:59.999`);
 
-  // Validate date
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     throw new AppError("Invalid date format. Use YYYY-MM-DD", 400);
+  }
+
+  const version = await getShowsCacheVersion();
+  const cacheKey = showsByMovieAndDateKey(version, movieId, date);
+
+  // ✅ Cache check (20 sec)
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      shows: JSON.parse(cached),
+    });
   }
 
   // Check if selected date is today (safe compare)
   const todayStr = new Date().toISOString().slice(0, 10);
   const isToday = date === todayStr;
 
-  // BookMyShow-like buffer (optional)
+  // BookMyShow-like buffer
   const bufferMinutes = 10;
   const nowPlusBuffer = new Date(Date.now() + bufferMinutes * 60 * 1000);
 
@@ -40,7 +89,7 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     where: {
       movieId,
       startTime: {
-        gte: isToday ? nowPlusBuffer : start, // ✅ hide past + near-start shows
+        gte: isToday ? nowPlusBuffer : start,
         lte: end,
       },
     },
@@ -54,55 +103,86 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
+  await redis.set(cacheKey, JSON.stringify(shows), "EX", 20);
+
   res.json({
     success: true,
+    source: "db",
     shows,
   });
 });
 
-  
-// GET /api/shows/:showId (SeatLayout page)
+// =====================================
+// GET /api/shows/:showId  (SeatLayout page)
+// =====================================
 export const getShowById = asyncHandler(async (req, res) => {
   const { showId } = req.params;
 
-  const show = await prisma.show.findUnique({
-    where: { id: showId },
-    include: {
-      movie: true,
-      screen: {
-        include: {
-          theatre: true, // ✅ theatre comes via screen
+  const version = await getShowsCacheVersion();
+  const cacheKey = showBaseKey(version, showId);
+
+  // ✅ Cache base show info (movie + screen + theatre)
+  const cached = await redis.get(cacheKey);
+
+  let baseShow;
+
+  if (cached) {
+    baseShow = JSON.parse(cached);
+  } else {
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: {
+        movie: true,
+        screen: {
+          include: {
+            theatre: true,
+          },
         },
+        bookings: true,
       },
-      bookings: true,
-    },
-  });
+    });
 
-  if (!show) throw new AppError("Show not found", 404);
+    if (!show) throw new AppError("Show not found", 404);
 
-  // ✅ booked seats from DB
-  const bookedSeats = show.bookings.flatMap((b) => b.bookedSeats);
-
-  // ✅ locked seats from Redis
-  const lockedMap = await redis.hgetall(`lock:show:${showId}`);
-  const lockedSeats = Object.keys(lockedMap || {});
-
-  res.json({
-    success: true,
-    show: {
+    // store base data (without bookings)
+    baseShow = {
       id: show.id,
       startTime: show.startTime,
       seatPrice: show.seatPrice,
       movie: show.movie,
-      theatre: show.screen.theatre, // ✅ theatre from screen
-      screen: show.screen, // ✅ screen.layout here
+      theatre: show.screen.theatre,
+      screen: show.screen,
+    };
+
+    await redis.set(cacheKey, JSON.stringify(baseShow), "EX", 30);
+  }
+
+  // ✅ booked seats ALWAYS fresh from DB
+  const bookingRows = await prisma.booking.findMany({
+    where: { showId },
+    select: { bookedSeats: true },
+  });
+  const bookedSeats = bookingRows.flatMap((b) => b.bookedSeats);
+
+  // ✅ locked seats ALWAYS fresh from Redis
+  const lockedMap = await redis.hgetall(lockKey(showId));
+  const lockedSeats = Object.keys(lockedMap || {});
+
+  res.json({
+    success: true,
+    source: cached ? "cache+freshSeats" : "db+freshSeats",
+    show: {
+      ...baseShow,
       bookedSeats,
-      lockedSeats, // ✅ ADDED
+      lockedSeats,
     },
   });
 });
 
-// ADMIN: create show
+// =====================================
+// ADMIN: CREATE SHOW
+// POST /api/shows
+// =====================================
 export const createShow = asyncHandler(async (req, res) => {
   const { movieId, screenId, startTime, seatPrice, seatPrices } = req.body;
 
@@ -113,7 +193,6 @@ export const createShow = asyncHandler(async (req, res) => {
     );
   }
 
-  // optional: check screen exists
   const screen = await prisma.screen.findUnique({
     where: { id: screenId },
   });
@@ -126,22 +205,37 @@ export const createShow = asyncHandler(async (req, res) => {
       screenId,
       startTime: new Date(startTime),
       seatPrice,
-      seatPrices, // optional JSON
+      seatPrices,
     },
   });
+
+  // ✅ invalidate shows cache
+  await bumpShowsCacheVersion();
 
   res.status(201).json({ success: true, show });
 });
 
+// =====================================
+// GET /api/shows/movie/:movieId
+// =====================================
 export const getShowsByMovie = asyncHandler(async (req, res) => {
   const { movieId } = req.params;
 
   if (!movieId) throw new AppError("movieId is required", 400);
 
+  const version = await getShowsCacheVersion();
+  const cacheKey = showsByMovieKey(version, movieId);
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({ success: true, source: "cache", shows: JSON.parse(cached) });
+  }
+
   const shows = await prisma.show.findMany({
-    where: { movieId,
+    where: {
+      movieId,
       startTime: { gte: new Date() },
-     },
+    },
     include: {
       screen: {
         include: {
@@ -152,12 +246,27 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  res.json({ success: true, shows });
+  await redis.set(cacheKey, JSON.stringify(shows), "EX", 20);
+
+  res.json({ success: true, source: "db", shows });
 });
+
+// =====================================
 // GET /api/shows/theatre/:theatreId
+// =====================================
 export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
   if (!theatreId) throw new AppError("theatreId is required", 400);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const version = await getShowsCacheVersion();
+  const cacheKey = showsByTheatreKey(version, theatreId, todayStr);
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({ success: true, source: "cache", shows: JSON.parse(cached) });
+  }
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -181,14 +290,29 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  res.json({ success: true, shows });
+  await redis.set(cacheKey, JSON.stringify(shows), "EX", 20);
+
+  res.json({ success: true, source: "db", shows });
 });
 
-
+// =====================================
 // GET /api/shows/all  (ADMIN)
+// =====================================
 export const getAllShowsAdmin = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const cursor = req.query.cursor || null;
+
+  const version = await getShowsCacheVersion();
+  const cacheKey = adminShowsKey(version, limit, cursor);
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      ...JSON.parse(cached),
+    });
+  }
 
   const shows = await prisma.show.findMany({
     take: limit + 1,
@@ -205,7 +329,6 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
         },
       },
     },
-    // stable order (better than only startTime)
     orderBy: [{ startTime: "desc" }, { id: "desc" }],
   });
 
@@ -219,7 +342,6 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
     movie: s.movie,
     screen: s.screen,
     theatre: s.screen?.theatre,
-
     totalBookings: s.bookings?.length || 0,
     earnings: (s.bookings || []).reduce(
       (sum, b) => sum + (b.totalAmount || 0),
@@ -227,15 +349,24 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
     ),
   }));
 
-  res.json({
-    success: true,
+  const responseData = {
     shows: formatted,
     nextCursor: hasNextPage ? data[data.length - 1].id : null,
     hasNextPage,
+  };
+
+  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 15);
+
+  res.json({
+    success: true,
+    source: "db",
+    ...responseData,
   });
 });
 
+// =====================================
 // POST /api/shows/:showId/lock
+// =====================================
 export const lockSeats = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { showId } = req.params;
@@ -246,7 +377,6 @@ export const lockSeats = asyncHandler(async (req, res) => {
     throw new AppError("seats array is required", 400);
   }
 
-  // check show exists + booked seats
   const show = await prisma.show.findUnique({
     where: { id: showId },
     select: {
@@ -257,14 +387,12 @@ export const lockSeats = asyncHandler(async (req, res) => {
 
   if (!show) throw new AppError("Show not found", 404);
 
-  // already booked check
   const alreadyBooked = new Set(show.bookings.flatMap((b) => b.bookedSeats));
   const conflictBooked = seats.find((s) => alreadyBooked.has(s));
   if (conflictBooked) {
     throw new AppError(`Seat ${conflictBooked} already booked`, 409);
   }
 
-  // atomic lock in redis
   const result = await redis.eval(
     lockSeatsLua,
     1,
@@ -289,7 +417,9 @@ export const lockSeats = asyncHandler(async (req, res) => {
   });
 });
 
+// =====================================
 // POST /api/shows/:showId/unlock
+// =====================================
 export const unlockSeats = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { showId } = req.params;
@@ -302,7 +432,6 @@ export const unlockSeats = asyncHandler(async (req, res) => {
 
   const key = lockKey(showId);
 
-  // pipeline all hget
   const pipeline = redis.pipeline();
   seats.forEach((seat) => pipeline.hget(key, seat));
   const results = await pipeline.exec();

@@ -4,23 +4,64 @@ const { PrismaClient } = pkg;
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
 
+import redis from "../config/redis.js"; // ✅ add this
+
 const prisma = new PrismaClient();
+
+// =====================================
+// ✅ Resume-ready Cache Versioning (Theatres)
+// =====================================
+const THEATRES_CACHE_VERSION_KEY = "theatres:cache:version";
+
+const getTheatresCacheVersion = async () => {
+  const v = await redis.get(THEATRES_CACHE_VERSION_KEY);
+  if (!v) {
+    await redis.set(THEATRES_CACHE_VERSION_KEY, "1");
+    return "1";
+  }
+  return v;
+};
+
+const bumpTheatresCacheVersion = async () => {
+  await redis.incr(THEATRES_CACHE_VERSION_KEY);
+};
+
+// =====================================
+// Cache Key Helpers
+// =====================================
+const theatresListKey = (version) => `theatres:v${version}:list`;
+const theatreDetailsKey = (version, id) => `theatres:v${version}:details:${id}`;
 
 /**
  * GET /api/theatres
  * Public: list theatres (with screen count)
  */
 export const getTheatres = asyncHandler(async (req, res) => {
+  const version = await getTheatresCacheVersion();
+  const cacheKey = theatresListKey(version);
+
+  // ✅ cache check (5 min)
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      theatres: JSON.parse(cached),
+    });
+  }
+
   const theatres = await prisma.theatre.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       _count: {
-        select: { screenList: true }, // ✅ screen count
+        select: { screenList: true },
       },
     },
   });
 
-  res.json({ success: true, theatres });
+  await redis.set(cacheKey, JSON.stringify(theatres), "EX", 300);
+
+  res.json({ success: true, source: "db", theatres });
 });
 
 /**
@@ -30,24 +71,39 @@ export const getTheatres = asyncHandler(async (req, res) => {
 export const getTheatreById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
+  const version = await getTheatresCacheVersion();
+  const cacheKey = theatreDetailsKey(version, id);
+
+  // ✅ cache check (10 min)
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      theatre: JSON.parse(cached),
+    });
+  }
+
   const theatre = await prisma.theatre.findUnique({
     where: { id },
     include: {
-      screenList: true, // ✅ all screens
+      screenList: true,
       _count: {
-        select: { screenList: true }, // ✅ count
+        select: { screenList: true },
       },
     },
   });
 
   if (!theatre) throw new AppError("Theatre not found", 404);
 
-  res.json({ success: true, theatre });
+  await redis.set(cacheKey, JSON.stringify(theatre), "EX", 600);
+
+  res.json({ success: true, source: "db", theatre });
 });
 
 /**
  * POST /api/theatres
- * ADMIN: create theatre (NO screens field stored)
+ * ADMIN: create theatre
  */
 export const createTheatre = asyncHandler(async (req, res) => {
   const { name, city, area, address } = req.body;
@@ -58,11 +114,14 @@ export const createTheatre = asyncHandler(async (req, res) => {
     data: { name, city, area, address },
   });
 
+  // ✅ invalidate theatre cache
+  await bumpTheatresCacheVersion();
+
   res.status(201).json({ success: true, theatre });
 });
 
 /**
- * POST /api/theatres/:theatreId/sceens
+ * POST /api/theatres/:theatreId/screens
  * ADMIN: add screen with layout JSON
  */
 export const addScreenToTheatre = asyncHandler(async (req, res) => {
@@ -87,6 +146,9 @@ export const addScreenToTheatre = asyncHandler(async (req, res) => {
       theatreId,
     },
   });
+
+  // ✅ invalidate theatre cache (because screens changed)
+  await bumpTheatresCacheVersion();
 
   res.status(201).json({ success: true, screen });
 });

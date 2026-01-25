@@ -9,7 +9,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
-    "worker": "node -r dotenv/config workers/email.worker.js"
+    "worker": "node workers/email.worker.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

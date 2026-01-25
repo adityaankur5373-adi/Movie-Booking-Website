@@ -4,7 +4,40 @@ const { PrismaClient } = pkg;
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
 
+import redis from "../config/redis.js"; // ✅ your redis client
+
 const prisma = new PrismaClient();
+
+// =====================================
+// ✅ Resume-ready Redis Cache Versioning
+// =====================================
+const MOVIES_CACHE_VERSION_KEY = "movies:cache:version";
+
+const getMoviesCacheVersion = async () => {
+  const v = await redis.get(MOVIES_CACHE_VERSION_KEY);
+  if (!v) {
+    await redis.set(MOVIES_CACHE_VERSION_KEY, "1");
+    return "1";
+  }
+  return v;
+};
+
+const bumpMoviesCacheVersion = async () => {
+  await redis.incr(MOVIES_CACHE_VERSION_KEY);
+};
+
+// =====================================
+// Cache Key Helpers
+// =====================================
+const movieListCacheKey = (version, limit, cursor) =>
+  `movies:v${version}:list:limit=${limit}:cursor=${cursor || "null"}`;
+
+const movieDetailsCacheKey = (version, id) => `movies:v${version}:details:${id}`;
+
+const featuredMoviesCacheKey = (version, limit) =>
+  `movies:v${version}:featured:limit=${limit}`;
+
+const adminAllMoviesCacheKey = (version) => `movies:v${version}:admin:all`;
 
 // ================================
 // GET MOVIES (cursor pagination)
@@ -14,6 +47,20 @@ export const getMovies = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 12, 50);
   const cursor = req.query.cursor || null;
 
+  const version = await getMoviesCacheVersion();
+  const cacheKey = movieListCacheKey(version, limit, cursor);
+
+  // ✅ 1) Cache check
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      ...JSON.parse(cached),
+    });
+  }
+
+  // ✅ 2) DB fetch
   const movies = await prisma.movie.findMany({
     take: limit + 1,
     ...(cursor && {
@@ -31,11 +78,19 @@ export const getMovies = asyncHandler(async (req, res) => {
   const hasNextPage = movies.length > limit;
   const data = hasNextPage ? movies.slice(0, limit) : movies;
 
-  res.json({
-    success: true,
+  const responseData = {
     movies: data,
     nextCursor: hasNextPage ? data[data.length - 1].id : null,
     hasNextPage,
+  };
+
+  // ✅ 3) Save cache (TTL 60 sec)
+  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 60);
+
+  return res.json({
+    success: true,
+    source: "db",
+    ...responseData,
   });
 });
 
@@ -46,6 +101,20 @@ export const getMovies = asyncHandler(async (req, res) => {
 export const getMovieById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
+  const version = await getMoviesCacheVersion();
+  const cacheKey = movieDetailsCacheKey(version, id);
+
+  // ✅ 1) Cache check
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      movie: JSON.parse(cached),
+    });
+  }
+
+  // ✅ 2) DB fetch
   const movie = await prisma.movie.findUnique({
     where: { id },
     include: { trailers: true, casts: true, genres: true },
@@ -53,7 +122,10 @@ export const getMovieById = asyncHandler(async (req, res) => {
 
   if (!movie) throw new AppError("Movie not found", 404);
 
-  res.json({ success: true, movie });
+  // ✅ 3) Save cache (TTL 5 min)
+  await redis.set(cacheKey, JSON.stringify(movie), "EX", 300);
+
+  res.json({ success: true, source: "db", movie });
 });
 
 // ================================
@@ -102,7 +174,7 @@ export const createMovie = asyncHandler(async (req, res) => {
 
   if (exists) throw new AppError("Movie already exists", 409);
 
-  // ✅ clean arrays (ONLY names)
+  // ✅ clean arrays
   const cleanGenres = Array.isArray(genres)
     ? genres
         .map((g) => ({
@@ -144,23 +216,20 @@ export const createMovie = asyncHandler(async (req, res) => {
       voteAverage: voteAverage ? Number(voteAverage) : null,
       voteCount: voteCount ? Number(voteCount) : null,
 
-      // ✅ Genres by NAME (no ID required)
       genres: {
         connectOrCreate: cleanGenres.map((g) => ({
-          where: { name: g.name }, // name must be unique in schema
+          where: { name: g.name },
           create: { name: g.name },
         })),
       },
 
-      // ✅ Cast by NAME (no ID required)
       casts: {
         connectOrCreate: cleanCasts.map((c) => ({
-          where: { name: c.name }, // name must be unique in schema
+          where: { name: c.name },
           create: { name: c.name, profilePath: c.profilePath },
         })),
       },
 
-      // trailers are per-movie (create fresh)
       trailers: {
         create: cleanTrailers.map((t) => ({
           image: t.image,
@@ -170,6 +239,9 @@ export const createMovie = asyncHandler(async (req, res) => {
     },
     include: { trailers: true, casts: true, genres: true },
   });
+
+  // ✅ bump cache version (invalidates all old cache)
+  await bumpMoviesCacheVersion();
 
   res.status(201).json({ success: true, movie });
 });
@@ -200,9 +272,9 @@ export const updateMovie = asyncHandler(async (req, res) => {
     tagline,
     voteAverage,
     voteCount,
-    genres,   // optional
-    trailers, // optional
-    casts,    // optional
+    genres,
+    trailers,
+    casts,
   } = req.body;
 
   // Unique checks
@@ -220,7 +292,6 @@ export const updateMovie = asyncHandler(async (req, res) => {
     if (imdbTaken) throw new AppError("imdbId already exists", 409);
   }
 
-  // clean optional arrays
   const cleanGenres = Array.isArray(genres)
     ? genres
         .map((g) => ({ name: (g?.name || "").trim() }))
@@ -259,17 +330,28 @@ export const updateMovie = asyncHandler(async (req, res) => {
             ? new Date(releaseDate)
             : null
           : undefined,
-      runtime: runtime !== undefined ? (runtime ? Number(runtime) : null) : undefined,
+      runtime:
+        runtime !== undefined ? (runtime ? Number(runtime) : null) : undefined,
 
-      originalLanguage: originalLanguage !== undefined ? originalLanguage : undefined,
+      originalLanguage:
+        originalLanguage !== undefined ? originalLanguage : undefined,
       tagline: tagline !== undefined ? tagline : undefined,
-      voteAverage: voteAverage !== undefined ? (voteAverage ? Number(voteAverage) : null) : undefined,
-      voteCount: voteCount !== undefined ? (voteCount ? Number(voteCount) : null) : undefined,
+      voteAverage:
+        voteAverage !== undefined
+          ? voteAverage
+            ? Number(voteAverage)
+            : null
+          : undefined,
+      voteCount:
+        voteCount !== undefined
+          ? voteCount
+            ? Number(voteCount)
+            : null
+          : undefined,
 
-      // ✅ Replace genres if provided (many-to-many)
       ...(cleanGenres && {
         genres: {
-          set: [], // remove old links
+          set: [],
           connectOrCreate: cleanGenres.map((g) => ({
             where: { name: g.name },
             create: { name: g.name },
@@ -277,10 +359,9 @@ export const updateMovie = asyncHandler(async (req, res) => {
         },
       }),
 
-      // ✅ Replace casts if provided (many-to-many)
       ...(cleanCasts && {
         casts: {
-          set: [], // remove old links
+          set: [],
           connectOrCreate: cleanCasts.map((c) => ({
             where: { name: c.name },
             create: { name: c.name, profilePath: c.profilePath },
@@ -288,10 +369,9 @@ export const updateMovie = asyncHandler(async (req, res) => {
         },
       }),
 
-      // ✅ Replace trailers if provided (trailers belong to movie)
       ...(cleanTrailers && {
         trailers: {
-          deleteMany: {}, // delete old trailers of this movie
+          deleteMany: {},
           create: cleanTrailers.map((t) => ({
             image: t.image,
             videoUrl: t.videoUrl,
@@ -301,6 +381,9 @@ export const updateMovie = asyncHandler(async (req, res) => {
     },
     include: { trailers: true, casts: true, genres: true },
   });
+
+  // ✅ bump cache version
+  await bumpMoviesCacheVersion();
 
   res.json({ success: true, movie: updated });
 });
@@ -332,6 +415,9 @@ export const deleteMovie = asyncHandler(async (req, res) => {
 
   await prisma.movie.delete({ where: { id } });
 
+  // ✅ bump cache version
+  await bumpMoviesCacheVersion();
+
   res.json({ success: true, message: "Movie deleted successfully" });
 });
 
@@ -341,6 +427,18 @@ export const deleteMovie = asyncHandler(async (req, res) => {
 // ================================
 export const getFeaturedMovies = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 4, 20);
+
+  const version = await getMoviesCacheVersion();
+  const cacheKey = featuredMoviesCacheKey(version, limit);
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      movies: JSON.parse(cached),
+    });
+  }
 
   const movies = await prisma.movie.findMany({
     take: limit,
@@ -352,24 +450,38 @@ export const getFeaturedMovies = asyncHandler(async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
 
-  res.json({ success: true, movies });
-});
- //getAllmovies //admin
- export const getAllmovies = async (req, res) => {
-  try {
-    const movies = await prisma.movie.findMany({
-      orderBy: { createdAt: "desc" },
-    });
+  // TTL 2 min
+  await redis.set(cacheKey, JSON.stringify(movies), "EX", 120);
 
-    res.status(200).json({
+  res.json({ success: true, source: "db", movies });
+});
+
+// ================================
+// GET ALL MOVIES (ADMIN)
+// GET /api/movies/all
+// ================================
+export const getAllmovies = asyncHandler(async (req, res) => {
+  const version = await getMoviesCacheVersion();
+  const cacheKey = adminAllMoviesCacheKey(version);
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.status(200).json({
       success: true,
-      movies,
-    });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
+      source: "cache",
+      movies: JSON.parse(cached),
     });
   }
-};
+
+  const movies = await prisma.movie.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+
+  await redis.set(cacheKey, JSON.stringify(movies), "EX", 60);
+
+  res.status(200).json({
+    success: true,
+    source: "db",
+    movies,
+  });
+});
