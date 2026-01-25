@@ -1,0 +1,383 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-hot-toast";
+import api from "../api/api";
+
+// Stripe
+import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
+
+import {
+  ShieldCheck,
+  Clock3,
+  Ticket,
+  CreditCard,
+  IndianRupee,
+  XCircle,
+} from "lucide-react";
+
+const TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const Payment = () => {
+  const { showId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const stripe = useStripe();
+  const elements = useElements();
+
+  const stateSeats = location.state?.seats || [];
+
+  const [seats, setSeats] = useState(stateSeats);
+  const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(TTL_MS);
+  const [paymentFailed, setPaymentFailed] = useState(false);
+
+  const [clientSecret, setClientSecret] = useState("");
+  const [amount, setAmount] = useState(0);
+
+  const confirmedRef = useRef(false);
+
+  // ✅ Unlock Seats
+  const unlockSeats = async () => {
+    try {
+      if (!showId) return;
+
+      const saved = localStorage.getItem(`payment_${showId}`);
+      const parsed = saved ? JSON.parse(saved) : null;
+
+      const seatsToUnlock = parsed?.seats || seats || [];
+
+      if (seatsToUnlock.length > 0) {
+        await api.post(`/shows/${showId}/unlock`, { seats: seatsToUnlock });
+      }
+
+      localStorage.removeItem(`payment_${showId}`);
+    } catch (err) {
+      console.log("Unlock error:", err?.response?.data || err.message);
+    }
+  };
+
+  // ✅ Setup seats + restore on refresh
+  useEffect(() => {
+    const key = `payment_${showId}`;
+
+    if (stateSeats.length > 0) {
+      localStorage.setItem(
+        key,
+        JSON.stringify({ seats: stateSeats, createdAt: Date.now() })
+      );
+      setSeats(stateSeats);
+      setPaymentFailed(false);
+    } else {
+      const saved = localStorage.getItem(key);
+
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setSeats(parsed.seats || []);
+      } else {
+        toast.error("No seats selected. Please select again.");
+        navigate(`/shows/${showId}/seats`);
+      }
+    }
+  }, [showId, stateSeats, navigate]);
+
+  // ✅ Create Stripe PaymentIntent (get clientSecret)
+  useEffect(() => {
+    const createIntent = async () => {
+      try {
+        if (!showId || seats.length === 0) return;
+
+        const { data } = await api.post("/payments/create-intent", {
+          showId,
+          seats,
+        });
+
+        if (data?.success) {
+          setClientSecret(data.clientSecret);
+          setAmount(data.amount);
+        } else {
+          toast.error("Failed to start payment");
+        }
+      } catch (err) {
+        console.log("Create intent error:", err?.response?.data || err.message);
+        toast.error(err?.response?.data?.message || "Failed to start payment");
+      }
+    };
+
+    createIntent();
+  }, [showId, seats]);
+
+  // ✅ Timer (localStorage based)
+  useEffect(() => {
+    if (!showId) return;
+
+    let interval;
+
+    const startTimer = async () => {
+      try {
+        const saved = localStorage.getItem(`payment_${showId}`);
+        const parsed = saved ? JSON.parse(saved) : null;
+
+        const createdAt = parsed?.createdAt || Date.now();
+
+        interval = setInterval(async () => {
+          const left = TTL_MS - (Date.now() - createdAt);
+          setTimeLeft(left);
+
+          if (left <= 0) {
+            clearInterval(interval);
+            toast.error("Payment time expired. Seats released.");
+            await unlockSeats();
+            navigate(`/shows/${showId}/seats`);
+          }
+        }, 1000);
+      } catch (err) {
+        console.log("Timer error:", err?.response?.data || err.message);
+      }
+    };
+
+    startTimer();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showId]);
+
+  const totalSeats = useMemo(() => seats.length, [seats]);
+
+  const minutes = Math.max(0, Math.floor(timeLeft / 60000));
+  const seconds = Math.max(0, Math.floor((timeLeft % 60000) / 1000));
+
+  const dangerTimer = timeLeft <= 60 * 1000; // last 1 min warning
+
+  // ✅ Pay Now using Stripe
+  const handlePayNow = async () => {
+    if (!stripe || !elements) return toast.error("Stripe not ready");
+    if (!clientSecret) return toast.error("Client secret not ready");
+
+    const card = elements.getElement(CardElement);
+    if (!card) return toast.error("Card input not found");
+
+    try {
+      setLoading(true);
+
+      const result = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: { card },
+      });
+
+      if (result.error) {
+        setPaymentFailed(true);
+        toast.error(result.error.message || "Payment failed");
+        return;
+      }
+
+      if (result.paymentIntent?.status === "succeeded") {
+        if (confirmedRef.current) return;
+        confirmedRef.current = true;
+
+        const paymentIntentId = result.paymentIntent.id;
+
+        const { data } = await api.post("/bookings/confirm", {
+          showId,
+          seats,
+          paymentIntentId,
+        });
+
+        if (data?.success) {
+          toast.success("Payment successful 🎉 Booking confirmed!");
+          localStorage.removeItem(`payment_${showId}`);
+          navigate("/my-bookings");
+        } else {
+          toast.error("Booking failed after payment");
+        }
+      }
+    } catch (err) {
+      console.log("Payment error:", err?.response?.data || err.message);
+      toast.error("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Cancel Payment
+  const handleCancel = async () => {
+    try {
+      setLoading(true);
+      await unlockSeats();
+      toast("Payment cancelled, seats released");
+      navigate(`/shows/${showId}/seats`);
+    } catch (err) {
+      console.log("Cancel error:", err?.response?.data || err.message);
+      toast.error("Failed to cancel payment");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!showId || seats.length === 0) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center text-gray-600 bg-white">
+        No seats selected.
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-[85vh] bg-white px-6 md:px-16 lg:px-40 pt-28 pb-24">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">
+            Complete your payment
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Your seats are temporarily locked. Finish payment to confirm booking.
+          </p>
+        </div>
+
+        <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700">
+          <ShieldCheck className="w-4 h-4 text-green-600" />
+          Secure payment powered by Stripe
+        </div>
+      </div>
+
+      {/* Layout */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Payment Card */}
+        <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-gray-700" />
+            <h2 className="text-lg font-semibold text-gray-900">Card details</h2>
+          </div>
+
+          <p className="text-xs text-gray-500 mt-2">
+            Use test card:{" "}
+            <span className="text-gray-900 font-medium">
+              4242 4242 4242 4242
+            </span>{" "}
+            (any future date, any CVC)
+          </p>
+
+          {/* Stripe Card */}
+          <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <CardElement
+              options={{
+                style: {
+                  base: {
+                    fontSize: "16px",
+                    color: "#111827",
+                    "::placeholder": { color: "#6b7280" },
+                  },
+                },
+              }}
+            />
+          </div>
+
+          {paymentFailed && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="text-sm text-red-600">
+                Payment failed. Your seats are still locked. Please try again.
+              </p>
+            </div>
+          )}
+
+          {!clientSecret && (
+            <p className="text-xs text-gray-500 mt-4">Initializing payment...</p>
+          )}
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <button
+              disabled={!stripe || !elements || !clientSecret || loading}
+              onClick={handlePayNow}
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition font-semibold text-white disabled:opacity-50"
+            >
+              {loading
+                ? "Processing..."
+                : paymentFailed
+                ? "Retry Payment"
+                : "Pay Now"}
+            </button>
+
+            <button
+              disabled={loading}
+              onClick={handleCancel}
+              className="w-full sm:w-auto px-6 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition font-semibold text-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <XCircle className="w-4 h-4" />
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        {/* Right: Summary */}
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm h-fit">
+          <h2 className="text-lg font-semibold text-gray-900">Order summary</h2>
+
+          <div className="mt-4 space-y-3 text-sm text-gray-700">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 flex items-center gap-2">
+                <Ticket className="w-4 h-4" />
+                Seats
+              </span>
+              <span className="text-gray-900 font-semibold">{totalSeats}</span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Selected</span>
+              <span className="text-gray-900 font-medium text-right">
+                {seats.join(", ")}
+              </span>
+            </div>
+
+            <div className="h-px bg-gray-200 my-2" />
+
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 flex items-center gap-2">
+                <IndianRupee className="w-4 h-4" />
+                Amount
+              </span>
+              <span className="text-gray-900 font-bold text-base">₹{amount}</span>
+            </div>
+
+            <div
+              className={`mt-3 rounded-xl border p-3 ${
+                dangerTimer
+                  ? "border-red-200 bg-red-50"
+                  : "border-gray-200 bg-gray-50"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600 flex items-center gap-2">
+                  <Clock3 className="w-4 h-4" />
+                  Time left
+                </span>
+                <span
+                  className={`font-semibold ${
+                    dangerTimer ? "text-red-600" : "text-gray-900"
+                  }`}
+                >
+                  {String(minutes).padStart(2, "0")}:
+                  {String(seconds).padStart(2, "0")}
+                </span>
+              </div>
+
+              <p className="text-xs text-gray-500 mt-2">
+                If time expires, seats will be released automatically.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">
+              Booking for show:{" "}
+              <span className="text-gray-900 font-medium">{showId}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Payment;

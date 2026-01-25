@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String?
+  email     String   @unique
+  password  String?
+  provider  String
+  role      Role     @default(USER)
+   favourites Favourite[] 
+  createdAt DateTime @default(now())
+
+  bookings Booking[]
+}
+
+model Genre {
+  id     String  @id @default(uuid())
+  name   String  @unique
+
+  movies Movie[] // many-to-many
+}
+
+
+model Movie {
+  id               String    @id @default(uuid())
+  imdbId           String?   @unique
+  title            String    @unique
+  overview         String?
+  posterPath       String?
+  backdropPath     String?
+  releaseDate      DateTime?
+  runtime          Int?
+  originalLanguage String?
+  tagline          String?
+  voteAverage      Float?
+  voteCount        Int?
+
+  trailers Trailer[]
+  casts    Cast[]
+  shows    Show[]
+  genres   Genre[]
+  favourites Favourite[]
+  createdAt DateTime @default(now())
+}
+
+model Trailer {
+  id       String @id @default(uuid())
+  image    String
+  youtubeKey String?
+  videoUrl String
+
+  movieId String
+  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+}
+
+model Cast {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  profilePath String?
+
+  movies Movie[] // many-to-many
+}
+
+
+model Theatre {
+  id      String @id @default(uuid())
+  name    String
+  city    String
+  area    String
+  address String
+   createdAt  DateTime @default(now())
+  screenList Screen[]
+}
+
+model Screen {
+  id       String @id @default(uuid())
+  name     String
+  screenNo Int
+  layout   Json
+
+  theatreId String
+  theatre   Theatre @relation(fields: [theatreId], references: [id], onDelete: Cascade)
+
+  shows Show[]
+}
+
+model Show {
+  id         String   @id @default(uuid())
+  startTime  DateTime
+  seatPrice  Int
+  seatPrices Json?
+
+  movieId String
+  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  screenId String
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  bookings Booking[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([screenId, startTime])
+  @@index([movieId])
+
+}
+
+model Booking {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  showId String
+  show   Show   @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  bookedSeats String[]
+  totalAmount Int
+  isPaid      Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+   @@index([userId, createdAt])
+  @@index([showId])
+}
+model Favourite {
+  id        String   @id @default(cuid())
+  userId    String
+  movieId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+   @@index([userId])
+}
+
