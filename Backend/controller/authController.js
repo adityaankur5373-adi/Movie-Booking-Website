@@ -10,9 +10,9 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // 🍪 Cookie options
 const cookieOptions = {
   httpOnly: true,
-  sameSite: process.env.NODE_ENV === "production",
-  secure: process.env.NODE_ENV === "production" ? "none" : "lax",
-  path: "/",     
+  secure: process.env.NODE_ENV === "production", // ✅ boolean
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // ✅ string
+  path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
@@ -145,11 +145,11 @@ res.setHeader("Surrogate-Control", "no-store");
 // authController.js
 export const logout =  asyncHandler((req, res) => {
    res.clearCookie("token", {
-    httpOnly: true,
-    sameSite: process.env.NODE_ENV === "production",
-    secure: process.env.NODE_ENV === "production" ? "none" : "lax",
-    path: "/",
-  });
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
+});
   res.json({ message: "Logged out" });
 });
 
