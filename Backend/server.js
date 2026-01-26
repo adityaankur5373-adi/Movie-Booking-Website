@@ -18,7 +18,7 @@ const app = express();
 // Middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["https://movie-booking-website-8zjx.vercel.app"],
     credentials: true,
   })
 );
@@ -31,14 +31,14 @@ app.get("/", (req, res) => {
   res.send("API Running ✅");
 });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/movies", movieRoutes);
-app.use("/api/theatres", theatreRoutes);
-app.use("/api/shows", showRoutes);
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/favourites", favouriteRoutes);
-app.use("/api/payments", paymentRoutes);
+app.use("/auth", authRoutes);
+app.use("/movies", movieRoutes);
+app.use("/theatres", theatreRoutes);
+app.use("/shows", showRoutes);
+app.use("/bookings", bookingRoutes);
+app.use("/admin", adminRoutes);
+app.use("/favourites", favouriteRoutes);
+app.use("/payments", paymentRoutes);
 // Error Middleware (always last)
 app.use(errorHandler);
 
