@@ -29,10 +29,10 @@
     "prisma": "^6.19.1",
     "qrcode": "^1.5.4",
     "redis": "^5.10.0",
-    "stripe": "^20.2.0"
+    "stripe": "^20.2.0",
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
-    "@types/node": "^25.0.3",
-    "dotenv": "^17.2.3"
+    "@types/node": "^25.0.3"
   }
 }
