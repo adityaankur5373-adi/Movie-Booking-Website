@@ -48,60 +48,7 @@ const adminBookingsKey = (version, limit, cursor) =>
  * POST /api/shows/:showId/lock
  * body: { seats: ["A1","A2"] }
  */
-export const lockSeats = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const { showId } = req.params;
-  const { seats } = req.body;
 
-  if (!showId) throw new AppError("showId is required", 400);
-  if (!seats || !Array.isArray(seats) || seats.length === 0) {
-    throw new AppError("seats array is required", 400);
-  }
-
-  // ✅ lightweight show existence check
-  const showExists = await prisma.show.findUnique({
-    where: { id: showId },
-    select: { id: true },
-  });
-
-  if (!showExists) throw new AppError("Show not found", 404);
-
-  // ✅ only confirmed bookings block seats permanently
-  const bookingRows = await prisma.booking.findMany({
-    where: { showId, status: "CONFIRMED" },
-    select: { bookedSeats: true },
-  });
-
-  const alreadyBooked = new Set(bookingRows.flatMap((b) => b.bookedSeats));
-  const conflictBooked = seats.find((s) => alreadyBooked.has(s));
-
-  if (conflictBooked) {
-    throw new AppError(`Seat ${conflictBooked} already booked`, 409);
-  }
-
-  const result = await redis.eval(
-    lockSeatsLua,
-    1,
-    lockKey(showId),
-    LOCK_TTL_SECONDS,
-    userId,
-    ...seats
-  );
-
-  if (Array.isArray(result) && result[0] === 0) {
-    throw new AppError(`Seat ${result[1]} is already locked`, 409);
-  }
-
-  const ttlRemaining = await redis.ttl(lockKey(showId));
-
-  return res.json({
-    success: true,
-    message: "Seats locked successfully",
-    seats,
-    ttlSeconds: LOCK_TTL_SECONDS,
-    ttlRemaining,
-  });
-});
 
 /**
  * POST /api/bookings/confirm

@@ -18,7 +18,7 @@ const app = express();
 // Middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://localhost:5173"],
+    origin: ["http://localhost:5173"],
     credentials: true,
   })
 );
@@ -35,7 +35,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/movies", movieRoutes);
 app.use("/api/theatres", theatreRoutes);
 app.use("/api/shows", showRoutes);
-app.use("/api", bookingRoutes);
+app.use("/api/bookings", bookingRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/favourites", favouriteRoutes);
 app.use("/api/payments", paymentRoutes);
