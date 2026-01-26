@@ -14,7 +14,7 @@ const SeatLayout = () => {
   const navigate = useNavigate();
 
   const user = useAuthStore((s) => s.user);
-
+  const [proceedLoading, setProceedLoading] = useState(false);
   const [show, setShow] = useState(null);
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -192,52 +192,70 @@ const SeatLayout = () => {
 }, [layout, selectedSeats]);
   // ✅ LOCK + go to payment page
   const handleProceed = async () => {
-    if (!user) {
-      toast.error("Please login/signup to continue");
-      return;
-    }
+  if (!user) {
+    toast.error("Please login/signup to continue");
+    return;
+  }
 
-    if (selectedSeats.length === 0) {
-      return toast("Select at least 1 seat");
-    }
+  if (selectedSeats.length === 0) {
+    return toast("Select at least 1 seat");
+  }
 
-    try {
-     const res = await api.post(`/shows/${showId}/lock`, {
+  if (proceedLoading) return; // ✅ stop double click
+
+  try {
+    setProceedLoading(true);
+
+    const res = await api.post(`/shows/${showId}/lock`, {
+      seats: selectedSeats,
+    });
+    const bookingRes = await api.post("/bookings/create", {
+showId,
+seats: selectedSeats,
+});
+
+
+const bookingId = bookingRes.data.booking.id;
+    proceedingRef.current = true;
+
+    localStorage.setItem(
+      `payment_${showId}`,
+      JSON.stringify({
         seats: selectedSeats,
-      });
+        createdAt: Date.now(),
+        bookingId: bookingId,
+        ttlRemaining: res.data.ttlRemaining,
+      })
+    );
 
-      // ✅ don't unlock when leaving, because payment page needs lock
-      proceedingRef.current = true;
-
-       localStorage.setItem(
-  `payment_${showId}`,
-  JSON.stringify({
-    seats: selectedSeats,
-    createdAt: Date.now(),
-    ttlRemaining: res.data.ttlRemaining, // ✅ store it
-  })
-);
-
-      navigate(`/payment/${showId}`, {
-        state: { seats: selectedSeats },
-      });
-    } catch (err) {
-      console.log("Lock error:", err?.response?.data || err.message);
-      toast.error(err?.response?.data?.message || "Failed to lock seats");
-    }
-  };
+    navigate(`/payment/${showId}`, {
+      state: { seats: selectedSeats,bookingId },
+    });
+    setSelectedSeats([]);
+  } catch (err) {
+    console.log("Lock error:", err?.response?.data || err.message);
+    toast.error(err?.response?.data?.message || "Failed to lock seats");
+  } finally {
+    setProceedLoading(false);
+  }
+};
 
   // ✅ AUTO UNLOCK on leaving SeatLayout (if user didn't proceed)
-  useEffect(() => {
-    return () => {
-      if (proceedingRef.current) return;
-      if (!user) return;
-      if (!selectedSeats || selectedSeats.length === 0) return;
+ useEffect(() => {
+  return () => {
+    if (proceedingRef.current) return;
+    if (!user) return;
 
-      api.post(`/shows/${showId}/unlock`, { seats: selectedSeats }).catch(() => {});
-    };
-  }, [showId, selectedSeats, user]);
+    const saved = localStorage.getItem(`payment_${showId}`);
+    const parsed = saved ? JSON.parse(saved) : null;
 
+    const seatsToUnlock = parsed?.seats || selectedSeats;
+
+    if (!seatsToUnlock || seatsToUnlock.length === 0) return;
+
+    api.post(`/shows/${showId}/unlock`, { seats: seatsToUnlock }).catch(() => {});
+  };
+}, [showId, user, selectedSeats]);
   if (loading) return <Loading />;
   if (!show || !layout) return <Loading />;
 
@@ -314,12 +332,13 @@ const SeatLayout = () => {
       {/* Proceed Button */}
       <div className="mt-10 flex justify-center">
         <button
-          onClick={handleProceed}
-          className="flex items-center gap-2 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium cursor-pointer active:scale-95"
-        >
-          Proceed to Checkout
-          <ArrowRightIcon className="w-4 h-4" strokeWidth={3} />
-        </button>
+  onClick={handleProceed}
+  disabled={proceedLoading}
+  className="flex items-center gap-2 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+>
+  {proceedLoading ? "Locking..." : "Proceed to Checkout"}
+  <ArrowRightIcon className="w-4 h-4" strokeWidth={3} />
+</button>
       </div>
     </div>
   );

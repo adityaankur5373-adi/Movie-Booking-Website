@@ -1,61 +1,69 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import BlurCircle from "./BlurCircle";
-import ReactPlayer from "react-player"
+import ReactPlayer from "react-player";
 import { PlayCircleIcon } from "lucide-react";
 import api from "../api/api";
+import { useQuery } from "@tanstack/react-query";
+
+const toEmbedUrl = (url) => {
+  if (!url) return null;
+
+  if (url.includes("youtube.com/watch?v=")) {
+    const id = url.split("v=")[1]?.split("&")[0];
+    return `https://www.youtube.com/embed/${id}`;
+  }
+
+  if (url.includes("youtu.be/")) {
+    const id = url.split("youtu.be/")[1]?.split("?")[0];
+    return `https://www.youtube.com/embed/${id}`;
+  }
+
+  return url;
+};
+
+const fetchFeaturedTrailers = async () => {
+  const { data } = await api.get("/movies/featured", {
+    params: { limit: 4 },
+  });
+
+  if (!data?.success) return [];
+
+  const allTrailers =
+    (data.movies || []).flatMap((m) =>
+      (m.trailers || []).map((t) => ({
+        ...t,
+        movieTitle: m.title,
+        posterPath: m.posterPath,
+      }))
+    ) || [];
+
+  return allTrailers;
+};
 
 const TrailerSection = () => {
-  const [trailers, setTrailers] = useState([]);
   const [currentTrailer, setCurrentTrailer] = useState(null);
 
-  const fetchFeaturedTrailers = async () => {
-    try {
-      const { data } = await api.get("/movies/featured", {
-        params: { limit: 4 },
-      });
-
-      if (data?.success) {
-        const allTrailers =
-          (data.movies || []).flatMap((m) =>
-            (m.trailers || []).map((t) => ({
-              ...t,
-              movieTitle: m.title,
-              posterPath: m.posterPath,
-            }))
-          ) || [];
-
-        setTrailers(allTrailers);
-        setCurrentTrailer(allTrailers[0] || null);
+  const {
+    data: trailers = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["featured-trailers", 4],
+    queryFn: fetchFeaturedTrailers,
+    staleTime: 1000 * 60 * 10, // 10 min cache (fast UI)
+    retry: 1,
+    onSuccess: (data) => {
+      if (!currentTrailer && data?.length > 0) {
+        setCurrentTrailer(data[0]);
       }
-    } catch (err) {
-      console.log(
-        "Error fetching featured trailers:",
-        err?.response?.data || err.message
-      );
-    }
-  };
+    },
+  });
 
-  const toEmbedUrl = (url) => {
-    if (!url) return null;
-
-    if (url.includes("youtube.com/watch?v=")) {
-      const id = url.split("v=")[1]?.split("&")[0];
-      return `https://www.youtube.com/embed/${id}`;
-    }
-
-    if (url.includes("youtu.be/")) {
-      const id = url.split("youtu.be/")[1]?.split("?")[0];
-      return `https://www.youtube.com/embed/${id}`;
-    }
-
-    return url;
-  };
-
-  useEffect(() => {
-    fetchFeaturedTrailers();
-  }, []);
-
-  const embedUrl = toEmbedUrl(currentTrailer?.videoUrl);
+  const embedUrl = useMemo(
+    () => toEmbedUrl(currentTrailer?.videoUrl),
+    [currentTrailer]
+  );
 
   return (
     <div className="px-6 md:px-16 lg:px-24 xl:px-44 py-20 overflow-hidden">
@@ -66,32 +74,52 @@ const TrailerSection = () => {
       <div className="relative mt-6">
         <BlurCircle top="-100px" right="-100px" />
 
-        {embedUrl ? (
-          <ReactPlayer
-            src={embedUrl}   // ✅ correct prop
-            controls={true}
-            className="mx-auto max-w-full"
-            width="960px"
-            height="540px"
-          />
-        ) : (
+        {/* Loading State */}
+        {isLoading && (
           <div className="w-full max-w-3xl mx-auto h-[300px] flex items-center justify-center bg-gray-900 rounded-xl border border-gray-700 text-gray-400">
-            Trailer not available
+            Loading trailers...
           </div>
         )}
 
-        {currentTrailer?.videoUrl && (
-          <a
-            href={currentTrailer.videoUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block text-center mt-4 text-primary underline"
-          >
-            Watch on YouTube
-          </a>
+        {/* Error State */}
+        {isError && (
+          <div className="w-full max-w-3xl mx-auto h-[300px] flex items-center justify-center bg-gray-900 rounded-xl border border-gray-700 text-red-400">
+            {error?.response?.data?.message || error?.message || "Something went wrong"}
+          </div>
+        )}
+
+        {/* Player */}
+        {!isLoading && !isError && (
+          <>
+            {embedUrl ? (
+              <ReactPlayer
+                url={embedUrl} // ✅ ReactPlayer uses "url" not "src"
+                controls={true}
+                className="mx-auto max-w-full"
+                width="960px"
+                height="540px"
+              />
+            ) : (
+              <div className="w-full max-w-3xl mx-auto h-[300px] flex items-center justify-center bg-gray-900 rounded-xl border border-gray-700 text-gray-400">
+                Trailer not available
+              </div>
+            )}
+
+            {currentTrailer?.videoUrl && (
+              <a
+                href={currentTrailer.videoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-center mt-4 text-primary underline"
+              >
+                Watch on YouTube
+              </a>
+            )}
+          </>
         )}
       </div>
 
+      {/* Thumbnails */}
       <div className="group grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 mt-8 max-w-3xl mx-auto">
         {trailers.map((t) => (
           <div

@@ -6,7 +6,8 @@ import {
   confirmBooking,
   getMyBookings,
   getAllBookings,
-  getBookingById
+  getBookingById,
+  createBooking
 } from "../controller/booking.controller.js";
 
 import {
@@ -32,7 +33,7 @@ router.get("/shows/:showId", protect, getShowById);
 
 // confirm booking after payment success
 router.post("/bookings/confirm", protect, confirmBooking);
-
+router.post("/bookings/create", protect, createBooking);
 // my bookings
 router.get("/bookings/me", protect, getMyBookings);
 

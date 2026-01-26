@@ -53,7 +53,7 @@ const MovieDetails = () => {
     enabled: !!id,
     staleTime: 30 * 1000,
   });
-
+   console.log(shows)
   // ✅ Group shows by date (same logic, optimized)
   const groupedDateTime = useMemo(() => {
     const grouped = shows.reduce((acc, s) => {
@@ -191,7 +191,7 @@ const MovieDetails = () => {
           ))}
         </div>
       </div>
-   {shows?.startTime ? (
+  {shows?.length > 0 ? (
   <DateSelect dateTime={groupedDateTime} id={id} />
 ) : (
   <div className="mt-4 max-w-xl flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
@@ -201,15 +201,14 @@ const MovieDetails = () => {
 
     <div>
       <p className="text-sm font-semibold text-white">
-        No date available for this show
+        No shows available for this movie
       </p>
       <p className="text-xs text-gray-400 mt-1">
-        Try selecting another showtime or refresh after some time.
+        Please check again later.
       </p>
     </div>
   </div>
 )}
-      
       <p className="text-lg font-medium mt-20 mb-8">You May Also Like</p>
 
       <div className="flex flex-wrap max-sm:justify-center gap-8">

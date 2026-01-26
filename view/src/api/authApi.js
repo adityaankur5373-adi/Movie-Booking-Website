@@ -1,7 +1,12 @@
 import api from "./api";
 
-export const login = (data) => api.post("/auth/login", data);
-export const signup = (data) => api.post("/auth/signup", data);
-export const googleLogin = (token) => api.post("/auth/google", { token });
-export const logout = () => api.post("/auth/logout");
+// Email/Password
+export const loginApi = (data) => api.post("/auth/login", data);
+export const signupApi = (data) => api.post("/auth/signup", data);
+
+// Google Login (credential/token)
+export const googleLoginApi = (token) => api.post("/auth/google", { token });
+
+// Logout + Session
+export const logoutApi = () => api.post("/auth/logout");
 export const getMe = () => api.get("/auth/me");

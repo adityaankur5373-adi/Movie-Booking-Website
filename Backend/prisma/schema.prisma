@@ -3,148 +3,141 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-enum Role {
-  USER
-  ADMIN
-}
-
 model User {
-  id        String   @id @default(uuid())
-  name      String?
-  email     String   @unique
-  password  String?
-  provider  String
-  role      Role     @default(USER)
-   favourites Favourite[] 
-  createdAt DateTime @default(now())
-
-  bookings Booking[]
+  id         String      @id @default(uuid())
+  name       String?
+  email      String      @unique
+  password   String?
+  provider String @default("local")
+googleId String? @unique
+  createdAt  DateTime    @default(now())
+  role       Role        @default(USER)
+  bookings   Booking[]
+  favourites Favourite[]
 }
 
 model Genre {
   id     String  @id @default(uuid())
   name   String  @unique
-
-  movies Movie[] // many-to-many
+  movies Movie[] @relation("GenreToMovie")
 }
 
-
 model Movie {
-  id               String    @id @default(uuid())
-  imdbId           String?   @unique
-  title            String    @unique
+  id               String      @id @default(uuid())
+  title            String      @unique
   overview         String?
   posterPath       String?
   backdropPath     String?
   releaseDate      DateTime?
   runtime          Int?
+  createdAt        DateTime    @default(now())
   originalLanguage String?
   tagline          String?
   voteAverage      Float?
   voteCount        Int?
-
-  trailers Trailer[]
-  casts    Cast[]
-  shows    Show[]
-  genres   Genre[]
-  favourites Favourite[]
-  createdAt DateTime @default(now())
+  imdbId           String?     @unique
+  favourites       Favourite[]
+  shows            Show[]
+  trailers         Trailer[]
+  casts            Cast[]      @relation("CastToMovie")
+  genres           Genre[]     @relation("GenreToMovie")
 }
 
 model Trailer {
-  id       String @id @default(uuid())
-  image    String
+  id         String  @id @default(uuid())
+  image      String
+  videoUrl   String
+  movieId    String
   youtubeKey String?
-  videoUrl String
-
-  movieId String
-  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  movie      Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
 }
 
 model Cast {
   id          String  @id @default(uuid())
   name        String  @unique
   profilePath String?
-
-  movies Movie[] // many-to-many
+  movies      Movie[] @relation("CastToMovie")
 }
 
-
 model Theatre {
-  id      String @id @default(uuid())
-  name    String
-  city    String
-  area    String
-  address String
-   createdAt  DateTime @default(now())
+  id         String   @id @default(uuid())
+  name       String
+  city       String
+  area       String
+  address    String
+  createdAt  DateTime @default(now())
   screenList Screen[]
 }
 
 model Screen {
-  id       String @id @default(uuid())
-  name     String
-  screenNo Int
-  layout   Json
-
+  id        String  @id @default(uuid())
+  name      String
+  screenNo  Int
+  layout    Json
   theatreId String
   theatre   Theatre @relation(fields: [theatreId], references: [id], onDelete: Cascade)
-
-  shows Show[]
+  shows     Show[]
+  createdAt DateTime @default(now())
 }
 
 model Show {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   startTime  DateTime
   seatPrice  Int
+  movieId    String
+  screenId   String
+  createdAt  DateTime  @default(now())
   seatPrices Json?
-
-  movieId String
-  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
-
-  screenId String
-  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
-
-  bookings Booking[]
-
-  createdAt DateTime @default(now())
+  bookings   Booking[]
+  movie      Movie     @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  screen     Screen    @relation(fields: [screenId], references: [id], onDelete: Cascade)
 
   @@unique([screenId, startTime])
   @@index([movieId])
-
 }
 
 model Booking {
-  id String @id @default(uuid())
+  id           String   @id @default(uuid())
+  userId       String
+  showId       String
+  paymentIntentId String?
+  bookedSeats  String[]
+  status BookingStatus @default(PENDING)
+  totalAmount  Int
+  isPaid       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  reminderSent Boolean  @default(false)
+  show         Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  showId String
-  show   Show   @relation(fields: [showId], references: [id], onDelete: Cascade)
-
-  bookedSeats String[]
-  totalAmount Int
-  isPaid      Boolean  @default(false)
-
-  createdAt DateTime @default(now())
-   @@index([userId, createdAt])
+  @@index([userId, createdAt])
   @@index([showId])
 }
+
 model Favourite {
   id        String   @id @default(cuid())
   userId    String
   movieId   String
   createdAt DateTime @default(now())
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, movieId])
-   @@index([userId])
+  @@index([userId])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
 }
 

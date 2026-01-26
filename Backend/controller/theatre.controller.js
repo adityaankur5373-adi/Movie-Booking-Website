@@ -1,15 +1,10 @@
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
-
+import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
-
-import redis from "../config/redis.js"; // ✅ add this
-
-const prisma = new PrismaClient();
+import redis from "../config/redis.js";
 
 // =====================================
-// ✅ Resume-ready Cache Versioning (Theatres)
+// ✅ Cache Versioning (Theatres)
 // =====================================
 const THEATRES_CACHE_VERSION_KEY = "theatres:cache:version";
 
@@ -29,18 +24,21 @@ const bumpTheatresCacheVersion = async () => {
 // =====================================
 // Cache Key Helpers
 // =====================================
-const theatresListKey = (version) => `theatres:v${version}:list`;
+const theatresListKey = (version, city) =>
+  `theatres:v${version}:list:city=${city || "all"}`;
+
 const theatreDetailsKey = (version, id) => `theatres:v${version}:details:${id}`;
 
-/**
- * GET /api/theatres
- * Public: list theatres (with screen count)
- */
+// =====================================
+// GET /api/theatres?city=Delhi
+// Public: list theatres (with screen count)
+// =====================================
 export const getTheatres = asyncHandler(async (req, res) => {
-  const version = await getTheatresCacheVersion();
-  const cacheKey = theatresListKey(version);
+  const city = req.query.city?.trim() || null;
 
-  // ✅ cache check (5 min)
+  const version = await getTheatresCacheVersion();
+  const cacheKey = theatresListKey(version, city);
+
   const cached = await redis.get(cacheKey);
   if (cached) {
     return res.json({
@@ -51,8 +49,15 @@ export const getTheatres = asyncHandler(async (req, res) => {
   }
 
   const theatres = await prisma.theatre.findMany({
+    where: city ? { city } : undefined,
     orderBy: { createdAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      city: true,
+      area: true,
+      address: true,
+      createdAt: true,
       _count: {
         select: { screenList: true },
       },
@@ -64,17 +69,17 @@ export const getTheatres = asyncHandler(async (req, res) => {
   res.json({ success: true, source: "db", theatres });
 });
 
-/**
- * GET /api/theatres/:id
- * Public: get single theatre (with screens + screen count)
- */
+// =====================================
+// GET /api/theatres/:id
+// Public: get single theatre
+// NOTE: screenList can be heavy because layout JSON is big
+// =====================================
 export const getTheatreById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const version = await getTheatresCacheVersion();
   const cacheKey = theatreDetailsKey(version, id);
 
-  // ✅ cache check (10 min)
   const cached = await redis.get(cacheKey);
   if (cached) {
     return res.json({
@@ -86,10 +91,26 @@ export const getTheatreById = asyncHandler(async (req, res) => {
 
   const theatre = await prisma.theatre.findUnique({
     where: { id },
-    include: {
-      screenList: true,
+    select: {
+      id: true,
+      name: true,
+      city: true,
+      area: true,
+      address: true,
+      createdAt: true,
       _count: {
         select: { screenList: true },
+      },
+
+      // ✅ screens info (but avoid layout for speed)
+      screenList: {
+        select: {
+          id: true,
+          name: true,
+          screenNo: true,
+          createdAt: true,
+        },
+        orderBy: { screenNo: "asc" },
       },
     },
   });
@@ -101,53 +122,79 @@ export const getTheatreById = asyncHandler(async (req, res) => {
   res.json({ success: true, source: "db", theatre });
 });
 
-/**
- * POST /api/theatres
- * ADMIN: create theatre
- */
+// =====================================
+// POST /api/theatres
+// ADMIN: create theatre
+// =====================================
 export const createTheatre = asyncHandler(async (req, res) => {
   const { name, city, area, address } = req.body;
 
-  if (!name || !city) throw new AppError("name and city are required", 400);
+  if (!name?.trim() || !city?.trim()) {
+    throw new AppError("name and city are required", 400);
+  }
 
   const theatre = await prisma.theatre.create({
-    data: { name, city, area, address },
+    data: {
+      name: name.trim(),
+      city: city.trim(),
+      area: area?.trim() || null,
+      address: address?.trim() || null,
+    },
   });
 
-  // ✅ invalidate theatre cache
   await bumpTheatresCacheVersion();
 
   res.status(201).json({ success: true, theatre });
 });
 
-/**
- * POST /api/theatres/:theatreId/screens
- * ADMIN: add screen with layout JSON
- */
+// =====================================
+// POST /api/theatres/:theatreId/screens
+// ADMIN: add screen with layout JSON
+// =====================================
 export const addScreenToTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
   const { name, screenNo, layout } = req.body;
 
-  if (!name || screenNo === undefined || !layout) {
+  if (!name?.trim() || screenNo === undefined || !layout) {
     throw new AppError("name, screenNo, layout are required", 400);
   }
 
   const theatre = await prisma.theatre.findUnique({
     where: { id: theatreId },
+    select: { id: true },
   });
 
   if (!theatre) throw new AppError("Theatre not found", 404);
 
+  // optional: prevent duplicate screenNo per theatre
+  const exists = await prisma.screen.findFirst({
+    where: {
+      theatreId,
+      screenNo: Number(screenNo),
+    },
+    select: { id: true },
+  });
+
+  if (exists) {
+    throw new AppError(`ScreenNo ${screenNo} already exists in this theatre`, 409);
+  }
+
   const screen = await prisma.screen.create({
     data: {
-      name,
+      name: name.trim(),
       screenNo: Number(screenNo),
       layout,
       theatreId,
     },
+    select: {
+      id: true,
+      name: true,
+      screenNo: true,
+      theatreId: true,
+      createdAt: true,
+    },
   });
 
-  // ✅ invalidate theatre cache (because screens changed)
   await bumpTheatresCacheVersion();
 
   res.status(201).json({ success: true, screen });

@@ -1,10 +1,9 @@
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
 
+import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
-import AppError from "../utils/AppError.js";
 
-const prisma = new PrismaClient();
+
+
 
 /**
  * GET /api/admin/dashboard

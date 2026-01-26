@@ -1,12 +1,9 @@
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
-
+import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
 
 import redis from "../config/redis.js"; // ✅ your redis client
 
-const prisma = new PrismaClient();
 
 // =====================================
 // ✅ Resume-ready Redis Cache Versioning
@@ -67,11 +64,19 @@ export const getMovies = asyncHandler(async (req, res) => {
       skip: 1,
       cursor: { id: cursor },
     }),
-    include: {
-      trailers: true,
-      casts: true,
-      genres: true,
+      select: {
+    id: true,
+    title: true,
+    posterPath: true,
+    releaseDate: true,
+    runtime: true,
+    voteAverage: true,
+
+    // if you want genres only (light)
+    genres: {
+      select: { id: true, name: true },
     },
+  },
     orderBy: { createdAt: "desc" },
   });
 
@@ -85,7 +90,7 @@ export const getMovies = asyncHandler(async (req, res) => {
   };
 
   // ✅ 3) Save cache (TTL 60 sec)
-  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 60);
+  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 300);
 
   return res.json({
     success: true,
@@ -440,15 +445,17 @@ export const getFeaturedMovies = asyncHandler(async (req, res) => {
     });
   }
 
-  const movies = await prisma.movie.findMany({
-    take: limit,
-    include: {
-      trailers: true,
-      casts: true,
-      genres: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+ const movies = await prisma.movie.findMany({
+  take: limit,
+  select: {
+    id: true,
+    title: true,
+    posterPath: true,
+    voteAverage: true,
+    genres: { select: { id: true, name: true } },
+  },
+  orderBy: { createdAt: "desc" },
+});
 
   // TTL 2 min
   await redis.set(cacheKey, JSON.stringify(movies), "EX", 120);
@@ -474,8 +481,14 @@ export const getAllmovies = asyncHandler(async (req, res) => {
   }
 
   const movies = await prisma.movie.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  select: {
+    id: true,
+    title: true,
+    posterPath: true,
+    createdAt: true,
+  },
+  orderBy: { createdAt: "desc" },
+});
 
   await redis.set(cacheKey, JSON.stringify(movies), "EX", 60);
 

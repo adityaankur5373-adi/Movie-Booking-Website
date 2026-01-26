@@ -1,19 +1,15 @@
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
-
+import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
 
 import redis from "../config/redis.js";
 import { lockSeatsLua } from "../utils/seatLock.lua.js";
 
-const prisma = new PrismaClient();
-
 const LOCK_TTL_SECONDS = 300; // 5 mins
 const lockKey = (showId) => `lock:show:${showId}`;
 
 // =====================================
-// ✅ Resume-ready Cache Versioning (Shows)
+// ✅ Cache Versioning (Shows)
 // =====================================
 const SHOWS_CACHE_VERSION_KEY = "shows:cache:version";
 
@@ -56,7 +52,6 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     throw new AppError("movieId and date are required", 400);
   }
 
-  // Date range for selected day
   const start = new Date(`${date}T00:00:00`);
   const end = new Date(`${date}T23:59:59.999`);
 
@@ -67,7 +62,6 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   const version = await getShowsCacheVersion();
   const cacheKey = showsByMovieAndDateKey(version, movieId, date);
 
-  // ✅ Cache check (20 sec)
   const cached = await redis.get(cacheKey);
   if (cached) {
     return res.json({
@@ -77,11 +71,9 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if selected date is today (safe compare)
   const todayStr = new Date().toISOString().slice(0, 10);
   const isToday = date === todayStr;
 
-  // BookMyShow-like buffer
   const bufferMinutes = 10;
   const nowPlusBuffer = new Date(Date.now() + bufferMinutes * 60 * 1000);
 
@@ -93,17 +85,29 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
         lte: end,
       },
     },
-    include: {
+    select: {
+      id: true,
+      startTime: true,
+      seatPrice: true,
       screen: {
-        include: {
-          theatre: true,
+        select: {
+          id: true,
+          name: true,
+          theatre: {
+            select: {
+              id: true,
+              name: true,
+              city: true,
+              address: true,
+            },
+          },
         },
       },
     },
     orderBy: { startTime: "asc" },
   });
 
-  await redis.set(cacheKey, JSON.stringify(shows), "EX", 20);
+  await redis.set(cacheKey, JSON.stringify(shows), "EX", 30);
 
   res.json({
     success: true,
@@ -121,7 +125,6 @@ export const getShowById = asyncHandler(async (req, res) => {
   const version = await getShowsCacheVersion();
   const cacheKey = showBaseKey(version, showId);
 
-  // ✅ Cache base show info (movie + screen + theatre)
   const cached = await redis.get(cacheKey);
 
   let baseShow;
@@ -131,37 +134,58 @@ export const getShowById = asyncHandler(async (req, res) => {
   } else {
     const show = await prisma.show.findUnique({
       where: { id: showId },
-      include: {
-        movie: true,
-        screen: {
-          include: {
-            theatre: true,
+      select: {
+        id: true,
+        startTime: true,
+        seatPrice: true,
+        seatPrices: true,
+        movie: {
+          select: {
+            id: true,
+            title: true,
+            posterPath: true,
+            runtime: true,
           },
         },
-        bookings: true,
+        screen: {
+          select: {
+            id: true,
+            name: true,
+            layout: true,
+            theatre: {
+              select: {
+                id: true,
+                name: true,
+                city: true,
+                address: true,
+              },
+            },
+          },
+        },
       },
     });
 
     if (!show) throw new AppError("Show not found", 404);
 
-    // store base data (without bookings)
     baseShow = {
       id: show.id,
       startTime: show.startTime,
       seatPrice: show.seatPrice,
+      seatPrices: show.seatPrices,
       movie: show.movie,
       theatre: show.screen.theatre,
       screen: show.screen,
     };
 
-    await redis.set(cacheKey, JSON.stringify(baseShow), "EX", 30);
+    await redis.set(cacheKey, JSON.stringify(baseShow), "EX", 60);
   }
 
-  // ✅ booked seats ALWAYS fresh from DB
+  // ✅ booked seats ALWAYS fresh from DB (only confirmed)
   const bookingRows = await prisma.booking.findMany({
-    where: { showId },
+    where: { showId, status: "CONFIRMED" },
     select: { bookedSeats: true },
   });
+
   const bookedSeats = bookingRows.flatMap((b) => b.bookedSeats);
 
   // ✅ locked seats ALWAYS fresh from Redis
@@ -186,7 +210,7 @@ export const getShowById = asyncHandler(async (req, res) => {
 export const createShow = asyncHandler(async (req, res) => {
   const { movieId, screenId, startTime, seatPrice, seatPrices } = req.body;
 
-  if (!movieId || !screenId || !startTime || !seatPrice) {
+  if (!movieId || !screenId || !startTime || seatPrice === undefined) {
     throw new AppError(
       "movieId, screenId, startTime, seatPrice are required",
       400
@@ -195,6 +219,7 @@ export const createShow = asyncHandler(async (req, res) => {
 
   const screen = await prisma.screen.findUnique({
     where: { id: screenId },
+    select: { id: true },
   });
 
   if (!screen) throw new AppError("Screen not found", 404);
@@ -209,7 +234,6 @@ export const createShow = asyncHandler(async (req, res) => {
     },
   });
 
-  // ✅ invalidate shows cache
   await bumpShowsCacheVersion();
 
   res.status(201).json({ success: true, show });
@@ -228,7 +252,11 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
 
   const cached = await redis.get(cacheKey);
   if (cached) {
-    return res.json({ success: true, source: "cache", shows: JSON.parse(cached) });
+    return res.json({
+      success: true,
+      source: "cache",
+      shows: JSON.parse(cached),
+    });
   }
 
   const shows = await prisma.show.findMany({
@@ -236,17 +264,28 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
       movieId,
       startTime: { gte: new Date() },
     },
-    include: {
+    select: {
+      id: true,
+      startTime: true,
+      seatPrice: true,
       screen: {
-        include: {
-          theatre: true,
+        select: {
+          id: true,
+          name: true,
+          theatre: {
+            select: {
+              id: true,
+              name: true,
+              city: true,
+            },
+          },
         },
       },
     },
     orderBy: { startTime: "asc" },
   });
 
-  await redis.set(cacheKey, JSON.stringify(shows), "EX", 20);
+  await redis.set(cacheKey, JSON.stringify(shows), "EX", 30);
 
   res.json({ success: true, source: "db", shows });
 });
@@ -265,7 +304,11 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
 
   const cached = await redis.get(cacheKey);
   if (cached) {
-    return res.json({ success: true, source: "cache", shows: JSON.parse(cached) });
+    return res.json({
+      success: true,
+      source: "cache",
+      shows: JSON.parse(cached),
+    });
   }
 
   const startOfDay = new Date();
@@ -281,16 +324,30 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
       },
       startTime: { gte: startOfDay, lte: endOfDay },
     },
-    include: {
+    select: {
+      id: true,
+      startTime: true,
+      seatPrice: true,
       movie: {
-        include: { genres: true },
+        select: {
+          id: true,
+          title: true,
+          posterPath: true,
+          genres: { select: { id: true, name: true } },
+        },
       },
-      screen: true,
+      screen: {
+        select: {
+          id: true,
+          name: true,
+          layout: true,
+        },
+      },
     },
     orderBy: { startTime: "asc" },
   });
 
-  await redis.set(cacheKey, JSON.stringify(shows), "EX", 20);
+  await redis.set(cacheKey, JSON.stringify(shows), "EX", 30);
 
   res.json({ success: true, source: "db", shows });
 });
@@ -320,13 +377,31 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
       skip: 1,
       cursor: { id: cursor },
     }),
-    include: {
-      movie: true,
-      bookings: true,
-      screen: {
-        include: {
-          theatre: true,
+    select: {
+      id: true,
+      startTime: true,
+      seatPrice: true,
+      movie: {
+        select: {
+          id: true,
+          title: true,
         },
+      },
+      screen: {
+        select: {
+          id: true,
+          name: true,
+          theatre: {
+            select: {
+              id: true,
+              name: true,
+              city: true,
+            },
+          },
+        },
+      },
+      _count: {
+        select: { bookings: true },
       },
     },
     orderBy: [{ startTime: "desc" }, { id: "desc" }],
@@ -335,6 +410,24 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
   const hasNextPage = shows.length > limit;
   const data = hasNextPage ? shows.slice(0, limit) : shows;
 
+  // optional: earnings calculation using aggregate (faster than loading bookings)
+  const showIds = data.map((s) => s.id);
+
+  const earningsAgg = await prisma.booking.groupBy({
+    by: ["showId"],
+    where: {
+      showId: { in: showIds },
+      status: "CONFIRMED",
+    },
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  const earningsMap = new Map(
+    earningsAgg.map((x) => [x.showId, x._sum.totalAmount || 0])
+  );
+
   const formatted = data.map((s) => ({
     id: s.id,
     startTime: s.startTime,
@@ -342,11 +435,8 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
     movie: s.movie,
     screen: s.screen,
     theatre: s.screen?.theatre,
-    totalBookings: s.bookings?.length || 0,
-    earnings: (s.bookings || []).reduce(
-      (sum, b) => sum + (b.totalAmount || 0),
-      0
-    ),
+    totalBookings: s._count.bookings,
+    earnings: earningsMap.get(s.id) || 0,
   }));
 
   const responseData = {
@@ -355,7 +445,7 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
     hasNextPage,
   };
 
-  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 15);
+  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 20);
 
   res.json({
     success: true,
@@ -377,17 +467,21 @@ export const lockSeats = asyncHandler(async (req, res) => {
     throw new AppError("seats array is required", 400);
   }
 
-  const show = await prisma.show.findUnique({
+  // show exists check (light)
+  const exists = await prisma.show.findUnique({
     where: { id: showId },
-    select: {
-      id: true,
-      bookings: { select: { bookedSeats: true } },
-    },
+    select: { id: true },
+  });
+  if (!exists) throw new AppError("Show not found", 404);
+
+  // booked seats from DB (only confirmed)
+  const bookingRows = await prisma.booking.findMany({
+    where: { showId, status: "CONFIRMED" },
+    select: { bookedSeats: true },
   });
 
-  if (!show) throw new AppError("Show not found", 404);
+  const alreadyBooked = new Set(bookingRows.flatMap((b) => b.bookedSeats));
 
-  const alreadyBooked = new Set(show.bookings.flatMap((b) => b.bookedSeats));
   const conflictBooked = seats.find((s) => alreadyBooked.has(s));
   if (conflictBooked) {
     throw new AppError(`Seat ${conflictBooked} already booked`, 409);

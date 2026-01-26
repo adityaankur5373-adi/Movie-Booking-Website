@@ -1,12 +1,10 @@
 import bcrypt from "bcrypt";
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
+import { prisma } from "../config/prisma.js";
 import generateToken from "../utils/generateToken.js";
 import { OAuth2Client } from "google-auth-library";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
 
-const prisma = new PrismaClient();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
  
 // 🍪 Cookie options
@@ -128,6 +126,10 @@ export const googleAuth = asyncHandler(async (req, res) => {
   res.json({ user });
 });
 export const getMe = asyncHandler(async (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+res.setHeader("Pragma", "no-cache");
+res.setHeader("Expires", "0");
+res.setHeader("Surrogate-Control", "no-store");
   const user = await prisma.user.findUnique({
     where: { id: req.user.id },
     select: {
@@ -152,18 +154,3 @@ export const logout =  asyncHandler((req, res) => {
 });
 
 // GET /api/movies/featured?limit=4
-export const getFeaturedMovies = asyncHandler(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 4, 20);
-
-  const movies = await prisma.movie.findMany({
-    take: limit,
-    include: {
-      trailers: true,
-      casts: true,
-      genres: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  res.json({ success: true, movies });
-});

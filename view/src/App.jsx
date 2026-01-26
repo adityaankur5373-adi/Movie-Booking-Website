@@ -1,9 +1,7 @@
-import { useEffect } from "react";
+
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import { Loader } from "lucide-react";
-
-import useAuthStore from "./store/useAuthStore";
+import { useSession } from "./hooks/useSession";
 
 // layouts
 import MainLayout from "./layouts/MainLayout";
@@ -25,26 +23,24 @@ import Loading from "./components/Loading";
 import Payment from "./pages/Payment";
 import Releases from "./pages/Releases";
 import TicketPage from "./pages/TicketPage";
+import Threaters from "./pages/Theatres";
+import TheatreDetails from "./pages/TheatreDetails";
+import MovieTheatres from "./pages/MovieTheatres";
+
 // admin
 import AdminDashboard from "./admin/AdminDashboard";
 import ListBooking from "./admin/ListBooking";
 import ListShows from "./admin/ListShows";
 import AddShows from "./admin/AddShows";
 import CreateMovie from "./admin/CreateMovie";
-import Threaters from './pages/Theatres'
-import TheatreDetails from "./pages/TheatreDetails";
-import MovieTheatres from "./pages/MovieTheatres";
 import CreateTheatre from "./admin/CreateTheatre";
 import CreateScreen from "./admin/CreateScreen";
+
 const App = () => {
-  const fetchUser = useAuthStore((s) => s.fetchUser);
-  const loading = useAuthStore((s) => s.loading);
+  const { isLoading } = useSession();
 
-  useEffect(() => {
-    fetchUser();
-  }, []);
+  if (isLoading) return <Loading />;
 
-    
   return (
     <>
       <Toaster />
@@ -56,9 +52,11 @@ const App = () => {
           <Route path="/movies" element={<Movies />} />
           <Route path="/movies/:id" element={<MovieDetails />} />
           <Route path="/shows/:showId/seats" element={<SeatLayout />} />
-          <Route path='/threater' element={<Threaters/>}/>
-          <Route path='/threater/:theatreId' element={<TheatreDetails/>}/>
-         <Route path="/movies/:movieId/theatres" element={<MovieTheatres />} />
+
+          <Route path="/threater" element={<Threaters />} />
+          <Route path="/threater/:theatreId" element={<TheatreDetails />} />
+          <Route path="/movies/:movieId/theatres" element={<MovieTheatres />} />
+
           <Route
             path="/my-bookings"
             element={
@@ -76,7 +74,8 @@ const App = () => {
               </ProtectedRoute>
             }
           />
-         <Route
+
+          <Route
             path="/ticket/:bookingId"
             element={
               <ProtectedRoute>
@@ -85,17 +84,18 @@ const App = () => {
             }
           />
         </Route>
-        <Route>
-          <Route
-            path="/payment/:showId"
-            element={
-              <ProtectedRoute>
-                <Payment />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/movies-releases" element={<Releases />} />
-        </Route>
+
+        {/* OTHER ROUTES (NO LAYOUT) */}
+        <Route
+          path="/payment/:showId"
+          element={
+            <ProtectedRoute>
+              <Payment />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/movies-releases" element={<Releases />} />
+
         {/* ADMIN LAYOUT */}
         <Route element={<AdminLayout />}>
           <Route
@@ -106,7 +106,8 @@ const App = () => {
               </AdminRoute>
             }
           />
-             <Route
+
+          <Route
             path="/admin/add-movies"
             element={
               <AdminRoute>
@@ -114,7 +115,8 @@ const App = () => {
               </AdminRoute>
             }
           />
-             <Route
+
+          <Route
             path="/admin/booking-list"
             element={
               <AdminRoute>
@@ -122,7 +124,8 @@ const App = () => {
               </AdminRoute>
             }
           />
-             <Route
+
+          <Route
             path="/admin/shows-list"
             element={
               <AdminRoute>
@@ -130,6 +133,7 @@ const App = () => {
               </AdminRoute>
             }
           />
+
           <Route
             path="/admin/create-movie"
             element={
@@ -138,7 +142,8 @@ const App = () => {
               </AdminRoute>
             }
           />
-           <Route
+
+          <Route
             path="/admin/create-theatre"
             element={
               <AdminRoute>
@@ -146,7 +151,8 @@ const App = () => {
               </AdminRoute>
             }
           />
-           <Route
+
+          <Route
             path="/admin/create-screen"
             element={
               <AdminRoute>

@@ -1,130 +1,121 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
-import { login, signup, googleLogin } from "../api/authApi"; 
-import useAuthStore from "../store/useAuthStore";
+import { loginApi, signupApi, googleLoginApi } from "../api/authApi";
 import { useNavigate } from "react-router-dom";
-import { toast } from 'react-hot-toast'
+import { toast } from "react-hot-toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import useAuthStore from "../store/useAuthStore";
 const AuthModal = ({ isOpen, onClose }) => {
-  const navigate = useNavigate()
-  const setUser = useAuthStore((state) => state.setUser )
+   const setUser = useAuthStore((s) => s.setUser);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState("login"); // login | signup
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-
-  if (!isOpen) return null;
-
-  // =========================
-  // HANDLE INPUT CHANGE
-  // =========================
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // =========================
-  // VALIDATION
-  // =========================
   const validate = () => {
     const err = {};
 
-    if (mode === "signup" && !form.name.trim()) {
-      err.name = "Name is required";
-    }
+    if (mode === "signup" && !form.name.trim()) err.name = "Name is required";
 
-    if (!form.email.trim()) {
-      err.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    if (!form.email.trim()) err.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
       err.email = "Invalid email address";
-    }
 
-    if (!form.password) {
-      err.password = "Password is required";
-    } else if (mode === "signup" && form.password.length < 6) {
+    if (!form.password) err.password = "Password is required";
+    else if (mode === "signup" && form.password.length < 6)
       err.password = "Password must be at least 6 characters";
-    }
 
     setErrors(err);
     return Object.keys(err).length === 0;
   };
 
-  // =========================
-  // EMAIL / PASSWORD AUTH
-  // =========================
-  const handleSubmit = async () => {
+  // ✅ EMAIL/PASSWORD MUTATION
+  const authMutation = useMutation({
+    mutationFn: async () => {
+      if (mode === "signup") return signupApi(form);
+
+      return loginApi({
+        email: form.email,
+        password: form.password,
+      });
+    },
+   onSuccess: (res) => {
+  const user = res?.data?.user;
+  if (!user) return toast.error("User not found");
+
+  setUser(user); 
+  queryClient.setQueryData(["me"], user);// ✅ instant update
+  onClose();
+
+  toast.success(mode === "login" ? "Logged in successfully" : "Account created");
+
+  if (user.role === "ADMIN") navigate("/admin", { replace: true });
+},
+   onError: (err) => {
+const msg =
+err?.response?.data?.message ||
+(mode === "login" ? "Invalid email or password" : "Signup failed");
+
+
+toast.error(msg);
+},
+  });
+
+  const handleSubmit = () => {
     if (!validate()) return;
-
-    try {
-      setLoading(true);
-
-      const res =
-        mode === "signup"
-          ? await signup(form)
-          : await  login({
-              email: form.email,
-              password: form.password,
-            });
-     const user = res.data.user;
-      setUser(user);
-      onClose();
-        if (user.role === "ADMIN") {
-      navigate("/admin", { replace: true });
-    } 
-    } catch (err) {
-      const message =
-    err?.response?.data?.message ||
-    err?.message ||
-    "Authentication failed";
-  toast.error(message);
-    } finally {
-      setLoading(false);
-    }
+    authMutation.mutate();
   };
 
-  // =========================
-  // GOOGLE AUTH
-  // =========================
-  const handleGoogleSuccess = async (credentialResponse) => {
-    try {
-      const res = await googleLogin(credentialResponse.credential);
-      const user = res.data.user
-      setUser(user);
-      onClose();
-       if (user.role === "ADMIN") {
-      navigate("/admin", { replace: true });
-    } 
-    } catch {
-      toast.error('Google login failed');
-    }
+  // ✅ GOOGLE MUTATION
+  const googleMutation = useMutation({
+    mutationFn: (credential) => googleLoginApi(credential),
+     onSuccess: (res) => {
+  const user = res?.data?.user;
+  if (!user) return toast.error("User not found");
+
+  setUser(user); 
+  queryClient.setQueryData(["me"], user);// ✅ instant update
+  onClose();
+
+  toast.success(mode === "login" ? "Logged in successfully" : "Account created");
+
+  if (user.role === "ADMIN") navigate("/admin", { replace: true });
+},  
+     onError: (err) => {
+const msg = err?.response?.data?.message || "Google login failed";
+toast.error(msg);
+},
+  });
+
+  const handleGoogleSuccess = (credentialResponse) => {
+    googleMutation.mutate(credentialResponse.credential);
   };
 
+  const loading = authMutation.isPending || googleMutation.isPending;
+   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4">
       <div className="relative bg-white w-full max-w-sm rounded-xl p-6 shadow-lg">
-
-        {/* CLOSE */}
         <X
           onClick={onClose}
           className="absolute top-4 right-4 cursor-pointer text-gray-500"
         />
 
-        {/* TITLE */}
         <h2 className="text-center text-lg font-semibold text-gray-800 mb-4">
           {mode === "login" ? "Log in" : "Create account"}
         </h2>
 
-        {/* GOOGLE */}
         <div className="flex justify-center mb-4">
           <GoogleLogin onSuccess={handleGoogleSuccess} />
         </div>
 
         <div className="text-center text-gray-400 text-sm mb-4">or</div>
 
-        {/* NAME */}
         {mode === "signup" && (
           <>
             <input
@@ -142,7 +133,6 @@ const AuthModal = ({ isOpen, onClose }) => {
           </>
         )}
 
-        {/* EMAIL */}
         <input
           name="email"
           placeholder="Email address"
@@ -156,7 +146,6 @@ const AuthModal = ({ isOpen, onClose }) => {
           <p className="text-xs text-red-500 mb-2">{errors.email}</p>
         )}
 
-        {/* PASSWORD */}
         <input
           type="password"
           name="password"
@@ -171,7 +160,6 @@ const AuthModal = ({ isOpen, onClose }) => {
           <p className="text-xs text-red-500 mb-2">{errors.password}</p>
         )}
 
-        {/* BUTTON */}
         <button
           onClick={handleSubmit}
           disabled={loading}
@@ -181,7 +169,6 @@ const AuthModal = ({ isOpen, onClose }) => {
           {loading ? "Please wait..." : mode === "login" ? "Log in" : "Sign up"}
         </button>
 
-        {/* SWITCH MODE */}
         <p className="text-center text-xs text-gray-500 mt-4">
           {mode === "login" ? (
             <>

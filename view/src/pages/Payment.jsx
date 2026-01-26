@@ -13,6 +13,7 @@ import {
   CreditCard,
   IndianRupee,
   XCircle,
+  ArrowLeft,
 } from "lucide-react";
 
 const TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -25,9 +26,18 @@ const Payment = () => {
   const stripe = useStripe();
   const elements = useElements();
 
-  const stateSeats = location.state?.seats || [];
+  // ✅ Make state stable (avoid infinite rerender loop)
+  const stateSeats = useMemo(() => location.state?.seats || [], [location.state]);
+  const stateBookingId = useMemo(
+    () => location.state?.bookingId || null,
+    [location.state]
+  );
+
+  const fromBookingPage = location.state?.fromBookingPage || false;
 
   const [seats, setSeats] = useState(stateSeats);
+  const [bookingId, setBookingId] = useState(stateBookingId);
+
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TTL_MS);
   const [paymentFailed, setPaymentFailed] = useState(false);
@@ -40,9 +50,9 @@ const Payment = () => {
   // ✅ Unlock Seats
   const unlockSeats = async () => {
     try {
-      if (!showId) return;
+      if (!showId || !bookingId) return;
 
-      const saved = localStorage.getItem(`payment_${showId}`);
+      const saved = localStorage.getItem(`payment_${bookingId}`);
       const parsed = saved ? JSON.parse(saved) : null;
 
       const seatsToUnlock = parsed?.seats || seats || [];
@@ -51,45 +61,75 @@ const Payment = () => {
         await api.post(`/shows/${showId}/unlock`, { seats: seatsToUnlock });
       }
 
-      localStorage.removeItem(`payment_${showId}`);
+      localStorage.removeItem(`payment_${bookingId}`);
     } catch (err) {
       console.log("Unlock error:", err?.response?.data || err.message);
     }
   };
 
-  // ✅ Setup seats + restore on refresh
+  // ✅ Setup seats + restore on refresh (FIXED)
   useEffect(() => {
-    const key = `payment_${showId}`;
+    if (!showId) return;
 
-    if (stateSeats.length > 0) {
-      localStorage.setItem(
-        key,
-        JSON.stringify({ seats: stateSeats, createdAt: Date.now() })
-      );
-      setSeats(stateSeats);
-      setPaymentFailed(false);
-    } else {
-      const saved = localStorage.getItem(key);
-
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setSeats(parsed.seats || []);
-      } else {
-        toast.error("No seats selected. Please select again.");
-        navigate(`/shows/${showId}/seats`);
-      }
+    // If bookingId not in state and also not in storage, redirect
+    if (!stateBookingId) {
+      toast.error("Invalid booking. Please select seats again.");
+      navigate(`/shows/${showId}/seats`, { replace: true });
+      return;
     }
-  }, [showId, stateSeats, navigate]);
 
-  // ✅ Create Stripe PaymentIntent (get clientSecret)
+    const key = `payment_${stateBookingId}`;
+
+    const saved = localStorage.getItem(key);
+    const parsed = saved ? JSON.parse(saved) : null;
+
+    // ✅ Fresh entry from seats page OR booking page
+    if (stateSeats.length > 0 && stateBookingId) {
+      // ✅ DO NOT overwrite createdAt if already exists
+      if (!parsed?.createdAt) {
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            seats: stateSeats,
+            bookingId: stateBookingId,
+            createdAt: Date.now(),
+          })
+        );
+      }
+
+      setSeats(stateSeats);
+      setBookingId(stateBookingId);
+      setPaymentFailed(false);
+      return;
+    }
+
+    // ✅ Refresh restore
+    if (parsed) {
+      setSeats(parsed.seats || []);
+      setBookingId(parsed.bookingId || null);
+
+      // ensure createdAt exists
+      if (!parsed.createdAt) {
+        parsed.createdAt = Date.now();
+        localStorage.setItem(key, JSON.stringify(parsed));
+      }
+    } else {
+      toast.error("No seats selected. Please select again.");
+      navigate(`/shows/${showId}/seats`, { replace: true });
+    }
+  }, [showId, stateSeats, stateBookingId, navigate]);
+
+  // ✅ Create Stripe PaymentIntent
   useEffect(() => {
     const createIntent = async () => {
       try {
-        if (!showId || seats.length === 0) return;
+        if (!showId || seats.length === 0 || !bookingId) return;
 
         const { data } = await api.post("/payments/create-intent", {
           showId,
           seats,
+          bookingId,
+          skipLock: fromBookingPage,
         });
 
         if (data?.success) {
@@ -105,32 +145,41 @@ const Payment = () => {
     };
 
     createIntent();
-  }, [showId, seats]);
+  }, [showId, seats, bookingId, fromBookingPage]);
 
-  // ✅ Timer (localStorage based)
+  // ✅ Timer (continues from stored createdAt)
   useEffect(() => {
-    if (!showId) return;
+    if (!showId || !bookingId) return;
 
     let interval;
 
     const startTimer = async () => {
       try {
-        const saved = localStorage.getItem(`payment_${showId}`);
+        const saved = localStorage.getItem(`payment_${bookingId}`);
         const parsed = saved ? JSON.parse(saved) : null;
 
-        const createdAt = parsed?.createdAt || Date.now();
+        const createdAt = parsed?.createdAt;
+        if (!createdAt) return;
 
-        interval = setInterval(async () => {
+        const updateTime = async () => {
           const left = TTL_MS - (Date.now() - createdAt);
-          setTimeLeft(left);
 
           if (left <= 0) {
+            setTimeLeft(0);
             clearInterval(interval);
             toast.error("Payment time expired. Seats released.");
             await unlockSeats();
-            navigate(`/shows/${showId}/seats`);
+            navigate(`/shows/${showId}/seats`, { replace: true });
+            return;
           }
-        }, 1000);
+
+          setTimeLeft(left);
+        };
+
+        // immediate update
+        await updateTime();
+
+        interval = setInterval(updateTime, 1000);
       } catch (err) {
         console.log("Timer error:", err?.response?.data || err.message);
       }
@@ -142,17 +191,24 @@ const Payment = () => {
       if (interval) clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showId]);
+  }, [showId, bookingId]);
 
   const totalSeats = useMemo(() => seats.length, [seats]);
 
   const minutes = Math.max(0, Math.floor(timeLeft / 60000));
   const seconds = Math.max(0, Math.floor((timeLeft % 60000) / 1000));
 
-  const dangerTimer = timeLeft <= 60 * 1000; // last 1 min warning
+  const dangerTimer = timeLeft <= 60 * 1000;
+  const isExpired = timeLeft <= 0;
 
-  // ✅ Pay Now using Stripe
+  // ✅ Pay Now
   const handlePayNow = async () => {
+    if (isExpired) {
+      toast.error("Time expired. Please select seats again.");
+      await unlockSeats();
+      return navigate(`/shows/${showId}/seats`, { replace: true });
+    }
+
     if (!stripe || !elements) return toast.error("Stripe not ready");
     if (!clientSecret) return toast.error("Client secret not ready");
 
@@ -179,14 +235,16 @@ const Payment = () => {
         const paymentIntentId = result.paymentIntent.id;
 
         const { data } = await api.post("/bookings/confirm", {
+          bookingId,
           showId,
           seats,
           paymentIntentId,
+          skipLock: fromBookingPage,
         });
 
         if (data?.success) {
           toast.success("Payment successful 🎉 Booking confirmed!");
-          localStorage.removeItem(`payment_${showId}`);
+          localStorage.removeItem(`payment_${bookingId}`);
           navigate("/my-bookings");
         } else {
           toast.error("Booking failed after payment");
@@ -206,13 +264,18 @@ const Payment = () => {
       setLoading(true);
       await unlockSeats();
       toast("Payment cancelled, seats released");
-      navigate(`/shows/${showId}/seats`);
+      navigate(`/shows/${showId}/seats`, { replace: true });
     } catch (err) {
       console.log("Cancel error:", err?.response?.data || err.message);
       toast.error("Failed to cancel payment");
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ Back button (go to my-bookings)
+  const handleBack = () => {
+    navigate("/my-bookings");
   };
 
   if (!showId || seats.length === 0) {
@@ -263,6 +326,7 @@ const Payment = () => {
           <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
             <CardElement
               options={{
+                disabled: isExpired,
                 style: {
                   base: {
                     fontSize: "16px",
@@ -287,16 +351,27 @@ const Payment = () => {
           )}
 
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            {!isExpired && (
+              <button
+                disabled={!stripe || !elements || !clientSecret || loading}
+                onClick={handlePayNow}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition font-semibold text-white disabled:opacity-50"
+              >
+                {loading
+                  ? "Processing..."
+                  : paymentFailed
+                  ? "Retry Payment"
+                  : "Pay Now"}
+              </button>
+            )}
+
             <button
-              disabled={!stripe || !elements || !clientSecret || loading}
-              onClick={handlePayNow}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition font-semibold text-white disabled:opacity-50"
+              disabled={loading}
+              onClick={handleBack}
+              className="w-full sm:w-auto px-6 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition font-semibold text-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {loading
-                ? "Processing..."
-                : paymentFailed
-                ? "Retry Payment"
-                : "Pay Now"}
+              <ArrowLeft className="w-4 h-4" />
+              Back
             </button>
 
             <button
@@ -308,6 +383,12 @@ const Payment = () => {
               Cancel
             </button>
           </div>
+
+          {isExpired && (
+            <p className="text-sm text-red-600 font-medium mt-4">
+              Time expired. Please select seats again.
+            </p>
+          )}
         </div>
 
         {/* Right: Summary */}

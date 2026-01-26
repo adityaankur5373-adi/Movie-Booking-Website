@@ -15,7 +15,6 @@ import paymentRoutes from "./routes/payment.routes.js";
 dotenv.config();
 
 const app = express();
-
 // Middleware
 app.use(
   cors({

@@ -1,53 +1,28 @@
 import { create } from "zustand";
-import { getMe, logout as logoutApi } from "../api/authApi";
 
 const useAuthStore = create((set) => ({
   user: null,
   isAuthenticated: false,
-  loading: true,
 
-  // after login / google login
+  // ✅ important: tells routes session check is finished
+  sessionReady: false,
+
   setUser: (user) =>
     set({
-      user,                  // 👈 includes role
+      user,
       isAuthenticated: true,
-      loading: false,
+      sessionReady: true,
     }),
 
-  // restore session
-  fetchUser: async () => {
-    set({ loading: true });
-    try {
-      const res = await getMe(); // { user: { id, name, email, role } }
+  clearUser: () =>
+    set({
+      user: null,
+      isAuthenticated: false,
+      sessionReady: true,
+    }),
 
-      set({
-        user: res.data.user,     // 👈 role stored here
-        isAuthenticated: true,
-        loading: false,
-      });
-    } catch {
-      set({
-        user: null,
-        isAuthenticated: false,
-        loading: false,
-      });
-    }
-  },
-
-  // logout
-  logout: async () => {
-    try {
-      await logoutApi();
-    } finally {
-      set({
-        user: null,
-        isAuthenticated: false,
-        loading: false,
-      });
-    }
-  },
+  // optional (when app starts)
+  setSessionReady: () => set({ sessionReady: true }),
 }));
 
 export default useAuthStore;
-
-

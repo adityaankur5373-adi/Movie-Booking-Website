@@ -1,6 +1,4 @@
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
-
+import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
 
@@ -8,20 +6,19 @@ import redis from "../config/redis.js";
 import { lockSeatsLua } from "../utils/seatLock.lua.js";
 import { calcTotalFromLayout } from "../utils/calcTotal.js";
 
-import { emailQueue } from "../queues/email.queue.js";
+import { sendMail } from "../services/mail.service.js";
 import { bookingConfirmTemplate } from "../templates/bookingConfirm.js";
-import { showReminderTemplate } from "../templates/showReminder.js";
 
 import Stripe from "stripe";
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+import { generateBookingQRBuffer } from "../utils/generateQr.js";
 
-const prisma = new PrismaClient();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const LOCK_TTL_SECONDS = 300; // 5 mins
 const lockKey = (showId) => `lock:show:${showId}`;
 
 // =====================================
-// ✅ Resume-ready Cache Versioning (Bookings)
+// Cache Versioning (Bookings)
 // =====================================
 const BOOKINGS_CACHE_VERSION_KEY = "bookings:cache:version";
 
@@ -50,7 +47,7 @@ const adminBookingsKey = (version, limit, cursor) =>
 /**
  * POST /api/shows/:showId/lock
  * body: { seats: ["A1","A2"] }
- **/
+ */
 export const lockSeats = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { showId } = req.params;
@@ -61,18 +58,23 @@ export const lockSeats = asyncHandler(async (req, res) => {
     throw new AppError("seats array is required", 400);
   }
 
-  const show = await prisma.show.findUnique({
+  // ✅ lightweight show existence check
+  const showExists = await prisma.show.findUnique({
     where: { id: showId },
-    select: {
-      id: true,
-      bookings: { select: { bookedSeats: true } },
-    },
+    select: { id: true },
   });
 
-  if (!show) throw new AppError("Show not found", 404);
+  if (!showExists) throw new AppError("Show not found", 404);
 
-  const alreadyBooked = new Set(show.bookings.flatMap((b) => b.bookedSeats));
+  // ✅ only confirmed bookings block seats permanently
+  const bookingRows = await prisma.booking.findMany({
+    where: { showId, status: "CONFIRMED" },
+    select: { bookedSeats: true },
+  });
+
+  const alreadyBooked = new Set(bookingRows.flatMap((b) => b.bookedSeats));
   const conflictBooked = seats.find((s) => alreadyBooked.has(s));
+
   if (conflictBooked) {
     throw new AppError(`Seat ${conflictBooked} already booked`, 409);
   }
@@ -103,76 +105,110 @@ export const lockSeats = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/bookings/confirm
- * body: { showId, seats, paymentIntentId }
+ * body: { bookingId, paymentIntentId, skipLock }
  */
 export const confirmBooking = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const { showId, seats, paymentIntentId } = req.body;
+  const { bookingId, paymentIntentId, skipLock } = req.body;
 
-  if (!showId) throw new AppError("showId is required", 400);
-  if (!seats || !Array.isArray(seats) || seats.length === 0) {
-    throw new AppError("seats array is required", 400);
+  const skipLockBool = skipLock === true || skipLock === "true";
+
+  if (!bookingId) throw new AppError("bookingId is required", 400);
+  if (!paymentIntentId) throw new AppError("paymentIntentId is required", 400);
+
+  // 1) Find booking (light select)
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: {
+      id: true,
+      userId: true,
+      showId: true,
+      bookedSeats: true,
+      isPaid: true,
+
+      user: { select: { email: true, name: true } },
+
+      show: {
+        select: {
+          id: true,
+          startTime: true,
+          movie: true,
+          screen: {
+            select: {
+              id: true,
+              name: true,
+              layout: true,
+              theatre: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!booking) throw new AppError("Booking not found", 404);
+  if (booking.userId !== userId) throw new AppError("Not allowed", 403);
+
+  if (booking.isPaid) {
+    return res.json({
+      success: true,
+      message: "Booking already confirmed",
+      booking,
+    });
   }
 
-  if (!paymentIntentId) {
-    throw new AppError("paymentIntentId is required", 400);
-  }
+  const showId = booking.showId;
+  const seats = booking.bookedSeats;
+  const show = booking.show;
 
-  // ✅ Stripe verify
+  if (!show) throw new AppError("Show not found", 404);
+  if (!seats || seats.length === 0) throw new AppError("No seats in booking", 400);
+
+  // 2) Stripe verify
   const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
 
   if (pi.status !== "succeeded") {
     throw new AppError("Payment not completed", 400);
   }
 
-  if (pi.metadata?.userId !== userId) {
-    throw new AppError("Payment user mismatch", 403);
-  }
-  if (pi.metadata?.showId !== showId) {
-    throw new AppError("Payment show mismatch", 403);
-  }
+  // metadata checks
+  if (pi.metadata?.userId !== userId) throw new AppError("Payment user mismatch", 403);
+  if (pi.metadata?.showId !== showId) throw new AppError("Payment show mismatch", 403);
+  if (pi.metadata?.bookingId !== bookingId)
+    throw new AppError("Payment booking mismatch", 403);
 
-  // show + screen layout for pricing
-  const show = await prisma.show.findUnique({
-    where: { id: showId },
-    select: {
-      id: true,
-      startTime: true,
-      bookings: { select: { bookedSeats: true } },
-      movie: true,
-      screen: {
-        select: {
-          id: true,
-          name: true,
-          layout: true,
-          theatre: true,
-        },
-      },
-    },
-  });
-
-  if (!show) throw new AppError("Show not found", 404);
-
-  // 1) Check locked seats belong to this user
+  // 3) Check locked seats belong to this user (ONLY if skipLock is false)
   const key = lockKey(showId);
 
-  const pipeline = redis.pipeline();
-  seats.forEach((seat) => pipeline.hget(key, seat));
-  const results = await pipeline.exec();
+  if (!skipLockBool) {
+    const pipeline = redis.pipeline();
+    seats.forEach((seat) => pipeline.hget(key, seat));
+    const results = await pipeline.exec();
 
-  for (let i = 0; i < seats.length; i++) {
-    const lockedBy = results[i]?.[1];
-    if (lockedBy !== userId) {
-      throw new AppError(`Seat ${seats[i]} is not locked by you`, 409);
+    for (let i = 0; i < seats.length; i++) {
+      const lockedBy = results[i]?.[1];
+      if (lockedBy !== userId) {
+        throw new AppError(`Seat ${seats[i]} is not locked by you`, 409);
+      }
     }
   }
 
-  // 2) DB booking conflict again
-  const alreadyBooked = new Set(show.bookings.flatMap((b) => b.bookedSeats));
+  // 4) DB booking conflict check (only CONFIRMED, ignore current booking)
+  const bookingRows = await prisma.booking.findMany({
+    where: {
+      showId,
+      status: "CONFIRMED",
+      NOT: { id: bookingId },
+    },
+    select: { bookedSeats: true },
+  });
+
+  const alreadyBooked = new Set(bookingRows.flatMap((b) => b.bookedSeats));
   const conflict = seats.find((s) => alreadyBooked.has(s));
+
   if (conflict) throw new AppError(`Seat ${conflict} already booked`, 409);
 
-  // 3) Layout pricing
+  // 5) Layout pricing
   const totalAmount = calcTotalFromLayout(show.screen?.layout, seats);
   if (totalAmount <= 0) throw new AppError("Invalid seat pricing", 400);
 
@@ -182,14 +218,15 @@ export const confirmBooking = asyncHandler(async (req, res) => {
     throw new AppError("Payment amount mismatch", 400);
   }
 
-  // 4) Create booking
-  const booking = await prisma.booking.create({
+  // 6) Update booking (✅ MUST BE CONFIRMED)
+  const updatedBooking = await prisma.booking.update({
+    where: { id: bookingId },
     data: {
-      userId,
-      showId,
-      bookedSeats: seats,
       totalAmount,
       isPaid: true,
+      paymentIntentId,
+      reminderSent: false,
+      status: "CONFIRMED", // ✅ FIXED
     },
     include: {
       user: { select: { email: true, name: true } },
@@ -202,91 +239,36 @@ export const confirmBooking = asyncHandler(async (req, res) => {
     },
   });
 
-  // 5) Queue emails
-  await emailQueue.add(
-    "booking-confirmation",
-    {
-      type: "BOOKING_CONFIRMATION",
-      bookingId: booking.id,
-      to: booking.user.email,
-      subject: "🎟 Booking Confirmed",
-      html: bookingConfirmTemplate(booking),
-    },
-    { attempts: 3, backoff: { type: "exponential", delay: 2000 } }
-  );
+  // 7) Generate QR buffer
+  const qrBuffer = await generateBookingQRBuffer(updatedBooking.id);
 
-  const showTime = new Date(booking.show.startTime).getTime();
-  const now = Date.now();
-
-  const reminderTime = showTime - 2 * 60 * 60 * 1000; // 2 hours before
-  const delay = reminderTime - now;
-
-  if (delay > 0) {
-    await emailQueue.add(
-      "show-reminder",
+  // 8) Send email
+  await sendMail({
+    to: updatedBooking.user.email,
+    subject: "🎟 Booking Confirmed",
+    html: bookingConfirmTemplate(updatedBooking),
+    attachments: [
       {
-        type: "SHOW_REMINDER",
-        to: booking.user.email,
-        subject: "⏰ Your show starts in 2 hours!",
-        html: showReminderTemplate(booking),
+        filename: `ticket-${updatedBooking.id}.png`,
+        content: qrBuffer,
+        cid: "booking_qr",
       },
-      {
-        delay,
-        jobId: `reminder-${booking.id}`,
-        attempts: 3,
-        backoff: { type: "exponential", delay: 2000 },
-      }
-    );
+    ],
+  });
+
+  // 9) Remove locks (ONLY if skipLock is false)
+  if (!skipLockBool) {
+    await redis.hdel(key, ...seats);
   }
 
-  // 6) Remove locks
-  await redis.hdel(key, ...seats);
-
-  // ✅ invalidate booking caches
+  // invalidate booking caches
   await bumpBookingsCacheVersion();
 
-  res.status(201).json({
+  return res.status(200).json({
     success: true,
     message: "Booking confirmed",
-    booking,
+    booking: updatedBooking,
   });
-});
-
-// =====================================
-// USER: my bookings (cached)
-// GET /api/bookings/my
-// =====================================
-export const getMyBookings = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-
-  const version = await getBookingsCacheVersion();
-  const cacheKey = myBookingsKey(version, userId);
-
-  const cached = await redis.get(cacheKey);
-  if (cached) {
-    return res.json({
-      success: true,
-      source: "cache",
-      bookings: JSON.parse(cached),
-    });
-  }
-
-  const bookings = await prisma.booking.findMany({
-    where: { userId },
-    include: {
-      show: {
-        include: {
-          movie: true,
-          screen: { include: { theatre: true } },
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  await redis.set(cacheKey, JSON.stringify(bookings), "EX", 30);
-
-  res.json({ success: true, source: "db", bookings });
 });
 
 // =====================================
@@ -315,12 +297,27 @@ export const getAllBookings = asyncHandler(async (req, res) => {
       skip: 1,
       cursor: { id: cursor },
     }),
-    include: {
+    select: {
+      id: true,
+      bookedSeats: true,
+      totalAmount: true,
+      isPaid: true,
+      status: true,
+      createdAt: true,
+
       user: { select: { id: true, name: true, email: true } },
       show: {
-        include: {
-          movie: true,
-          screen: { include: { theatre: true } },
+        select: {
+          id: true,
+          startTime: true,
+          movie: { select: { id: true, title: true, posterPath: true } },
+          screen: {
+            select: {
+              id: true,
+              name: true,
+              theatre: { select: { id: true, name: true, city: true } },
+            },
+          },
         },
       },
     },
@@ -336,7 +333,7 @@ export const getAllBookings = asyncHandler(async (req, res) => {
     hasNextPage,
   };
 
-  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 15);
+  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 20);
 
   res.json({
     success: true,
@@ -362,7 +359,6 @@ export const getBookingById = asyncHandler(async (req, res) => {
   if (cached) {
     const booking = JSON.parse(cached);
 
-    // ✅ security check even on cache
     if (booking.userId !== userId) throw new AppError("Not allowed", 403);
 
     return res.json({
@@ -374,13 +370,26 @@ export const getBookingById = asyncHandler(async (req, res) => {
 
   const booking = await prisma.booking.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      userId: true,
+      showId: true,
+      bookedSeats: true,
+      totalAmount: true,
+      isPaid: true,
+      status: true,
+      createdAt: true,
+
       show: {
-        include: {
-          movie: true,
+        select: {
+          id: true,
+          startTime: true,
+          movie: { select: { id: true, title: true, posterPath: true } },
           screen: {
-            include: {
-              theatre: true,
+            select: {
+              id: true,
+              name: true,
+              theatre: { select: { id: true, name: true, city: true } },
             },
           },
         },
@@ -389,10 +398,7 @@ export const getBookingById = asyncHandler(async (req, res) => {
   });
 
   if (!booking) throw new AppError("Booking not found", 404);
-
-  if (booking.userId !== userId) {
-    throw new AppError("Not allowed", 403);
-  }
+  if (booking.userId !== userId) throw new AppError("Not allowed", 403);
 
   await redis.set(cacheKey, JSON.stringify(booking), "EX", 60);
 
@@ -401,4 +407,97 @@ export const getBookingById = asyncHandler(async (req, res) => {
     source: "db",
     booking,
   });
+});
+
+// =====================================
+// POST /api/bookings
+// =====================================
+export const createBooking = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { showId, seats } = req.body;
+
+  if (!showId) throw new AppError("showId is required", 400);
+  if (!seats || !Array.isArray(seats) || seats.length === 0) {
+    throw new AppError("seats array is required", 400);
+  }
+
+  // optional: prevent duplicate pending booking for same show + same seats
+  const existing = await prisma.booking.findFirst({
+    where: {
+      userId,
+      showId,
+      isPaid: false,
+      bookedSeats: { equals: seats },
+    },
+  });
+
+  if (existing) {
+    return res.json({ success: true, booking: existing });
+  }
+
+  const booking = await prisma.booking.create({
+    data: {
+      userId,
+      showId,
+      bookedSeats: seats,
+      totalAmount: 0,
+      isPaid: false,
+      reminderSent: false,
+      status: "PENDING",
+    },
+  });
+
+  await bumpBookingsCacheVersion();
+
+  res.json({ success: true, booking });
+});
+
+// =====================================
+// GET /api/bookings/my
+// =====================================
+export const getMyBookings = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+
+  const version = await getBookingsCacheVersion();
+  const cacheKey = myBookingsKey(version, userId);
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      bookings: JSON.parse(cached),
+    });
+  }
+
+  const bookings = await prisma.booking.findMany({
+    where: { userId },
+    select: {
+      id: true,
+      bookedSeats: true,
+      totalAmount: true,
+      isPaid: true,
+      status: true,
+      createdAt: true,
+      show: {
+        select: {
+          id: true,
+          startTime: true,
+          movie: { select: { id: true, title: true, posterPath: true } },
+          screen: {
+            select: {
+              id: true,
+              name: true,
+              theatre: { select: { id: true, name: true, city: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  await redis.set(cacheKey, JSON.stringify(bookings), "EX", 30);
+
+  return res.json({ success: true, source: "db", bookings });
 });

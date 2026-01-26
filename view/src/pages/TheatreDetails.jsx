@@ -150,5 +150,4 @@ const TheatreDetails = () => {
     </div>
   );
 };
-
 export default TheatreDetails;
