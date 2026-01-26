@@ -18,7 +18,7 @@ const app = express();
 // Middleware
 app.use(
   cors({
-    origin: ["https://movie-booking-website-x2bk.vercel.app"],
+    origin: ["https://movie-booking-website-2vsx.vercel.app"],
     credentials: true,
   })
 );
