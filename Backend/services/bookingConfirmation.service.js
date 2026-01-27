@@ -1,38 +1,83 @@
-import Stripe from "stripe";
-import { confirmBookingFromWebhook } from "../services/bookingConfirmation.service.js";
+import { prisma } from "../config/prisma.js";
+import redis from "../config/redis.js";
+import { generateBookingQRBuffer } from "../utils/generateQr.js";
+import { sendMail } from "./mail.service.js";
+import { bookingConfirmTemplate } from "../templates/bookingConfirm.js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+export const confirmBookingFromWebhook = async ({
+  bookingId,
+  paymentIntentId,
+}) => {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      user: true,
+      show: {
+        include: {
+          movie: true,
+          screen: { include: { theatre: true } },
+        },
+      },
+    },
+  });
 
-const stripeWebhook = async (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(
-      req.body, // RAW buffer
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error("❌ Stripe signature error:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  // 🔒 Idempotency protection with logs
+  if (!booking) {
+    console.error("❌ Booking not found:", bookingId);
+    return;
   }
 
-  try {
-    if (event.type === "payment_intent.succeeded") {
-      const pi = event.data.object;
+  if (booking.isPaid) {
+    console.warn("⚠️ Booking already paid:", bookingId);
+    return;
+  }
 
-      await confirmBookingFromWebhook({
-        bookingId: pi.metadata.bookingId,
-        paymentIntentId: pi.id,
+  // ✅ CONFIRM BOOKING
+  const updatedBooking = await prisma.booking.update({
+    where: { id: bookingId },
+    data: {
+      isPaid: true,
+      status: "CONFIRMED",
+      paymentIntentId,
+    },
+    include: {
+      user: true,
+      show: {
+        include: {
+          movie: true,
+          screen: { include: { theatre: true } },
+        },
+      },
+    },
+  });
+
+  // 🚀 BACKGROUND TASKS
+  setImmediate(async () => {
+    try {
+      const qr = await generateBookingQRBuffer(updatedBooking.id);
+
+      await sendMail({
+        to: updatedBooking.user.email,
+        subject: "🎟 Booking Confirmed",
+        html: bookingConfirmTemplate(updatedBooking),
+        attachments: [
+          {
+            filename: `ticket-${updatedBooking.id}.png`,
+            content: qr,
+          },
+        ],
       });
+
+      // 🔓 Release seat locks SAFELY
+      const lockKey = `lock:show:${updatedBooking.showId}`;
+
+      if (updatedBooking.bookedSeats?.length) {
+        await redis.hdel(lockKey, ...updatedBooking.bookedSeats);
+      }
+
+      console.log("✅ Seats released for booking:", bookingId);
+    } catch (err) {
+      console.error("❌ Post-confirmation task failed:", err);
     }
-
-    return res.status(200).send("ok");
-  } catch (err) {
-    console.error("❌ Webhook processing failed:", err);
-    return res.status(500).send("Webhook handler failed");
-  }
+  });
 };
-
-export default stripeWebhook;

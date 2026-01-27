@@ -12,7 +12,7 @@ import adminRoutes from './routes/adminRoutes.js'
 import { errorHandler } from "./middlewares/errorMiddleware.js";
 import favouriteRoutes from "./routes/favourite.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
-import { stripeWebhook } from "./controller/stripeWebhook.controller.js";
+import  stripeWebhook  from "./controller/stripeWebhook.controller.js";
 dotenv.config();
 
 const app = express();
