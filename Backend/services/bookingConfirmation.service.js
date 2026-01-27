@@ -77,7 +77,7 @@ export const confirmBookingFromWebhook = async ({
             filename: `ticket-${updatedBooking.id}.png`,
             type: "image/png",
             disposition: "inline",
-            contentId: "booking_qr",            // ✅ must match HTML
+            content_id: "booking_qr",           // ✅ must match HTML
           },
         ],
       });
