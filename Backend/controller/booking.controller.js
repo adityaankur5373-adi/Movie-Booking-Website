@@ -359,6 +359,8 @@ export const getBookingById = asyncHandler(async (req, res) => {
 // =====================================
 // POST /api/bookings
 // =====================================
+  import { calcTotalFromLayout } from "../utils/calcTotal.js";
+
 export const createBooking = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { showId, seats } = req.body;
@@ -368,7 +370,7 @@ export const createBooking = asyncHandler(async (req, res) => {
     throw new AppError("seats array is required", 400);
   }
 
-  // optional: prevent duplicate pending booking for same show + same seats
+  // 1️⃣ Prevent duplicate pending booking
   const existing = await prisma.booking.findFirst({
     where: {
       userId,
@@ -382,12 +384,33 @@ export const createBooking = asyncHandler(async (req, res) => {
     return res.json({ success: true, booking: existing });
   }
 
+  // 2️⃣ Get show + screen layout
+  const show = await prisma.show.findUnique({
+    where: { id: showId },
+    include: {
+      screen: true,
+    },
+  });
+
+  if (!show) throw new AppError("Show not found", 404);
+  if (!show.screen?.layout) {
+    throw new AppError("Screen layout not configured", 500);
+  }
+
+  // 3️⃣ Calculate total using layout
+  const totalAmount = calcTotalFromLayout(show.screen.layout, seats);
+
+  if (!totalAmount || totalAmount <= 0) {
+    throw new AppError("Invalid seat pricing", 400);
+  }
+
+  // 4️⃣ Create booking with correct total
   const booking = await prisma.booking.create({
     data: {
       userId,
       showId,
       bookedSeats: seats,
-      totalAmount: 0,
+      totalAmount, // ✅ FIXED
       isPaid: false,
       reminderSent: false,
       status: "PENDING",
@@ -398,7 +421,6 @@ export const createBooking = asyncHandler(async (req, res) => {
 
   res.json({ success: true, booking });
 });
-
 // =====================================
 // GET /api/bookings/my
 // =====================================
