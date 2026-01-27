@@ -359,7 +359,7 @@ export const getBookingById = asyncHandler(async (req, res) => {
 // =====================================
 // POST /api/bookings
 // =====================================
-  import { calcTotalFromLayout } from "../utils/calcTotal.js";
+
 
 export const createBooking = asyncHandler(async (req, res) => {
   const userId = req.user.id;
