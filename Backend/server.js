@@ -23,7 +23,6 @@ app.use(
     credentials: true,
   })
 );
- app.options("*", cors());
 app.post(
 "/api/payments/webhook",
 express.raw({ type: "application/json" }),
