@@ -56,10 +56,7 @@ const App = () => {
           <Route path="/threater" element={<Threaters />} />
           <Route path="/threater/:theatreId" element={<TheatreDetails />} />
           <Route path="/movies/:movieId/theatres" element={<MovieTheatres />} />
-           <Route
-  path="/payment/success/:bookingId"
-  element={<PaymentSuccess />}
-/>
+         
           <Route
             path="/my-bookings"
             element={
@@ -98,7 +95,10 @@ const App = () => {
           }
         />
         <Route path="/movies-releases" element={<Releases />} />
-
+            <Route
+  path="/payment/success/:bookingId"
+  element={<PaymentSuccess />}
+/>
         {/* ADMIN LAYOUT */}
         <Route element={<AdminLayout />}>
           <Route
