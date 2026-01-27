@@ -8,7 +8,6 @@ import useAuthStore from "../store/useAuthStore";
 
 const Navbar = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-   console.log("AUTH:", isAuthenticated);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 

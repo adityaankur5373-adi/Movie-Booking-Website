@@ -12,6 +12,7 @@ import adminRoutes from './routes/adminRoutes.js'
 import { errorHandler } from "./middlewares/errorMiddleware.js";
 import favouriteRoutes from "./routes/favourite.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
+import { stripeWebhook } from "./controller/stripeWebhook.controller.js";
 dotenv.config();
 
 const app = express();
@@ -23,9 +24,13 @@ app.use(
   })
 );
 
+app.post(
+"/api/payments/webhook",
+express.raw({ type: "application/json" }),
+stripeWebhook
+);
 app.use(cookieParser());
 app.use(express.json());
-
 // Routes
 app.get("/", (req, res) => {
   res.send("API Running ✅");

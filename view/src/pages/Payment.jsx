@@ -202,61 +202,54 @@ const Payment = () => {
   const isExpired = timeLeft <= 0;
 
   // ✅ Pay Now
-  const handlePayNow = async () => {
-    if (isExpired) {
-      toast.error("Time expired. Please select seats again.");
-      await unlockSeats();
-      return navigate(`/shows/${showId}/seats`, { replace: true });
+    // ONLY CHANGED PARTS ARE MARKED WITH 🔥
+
+const handlePayNow = async () => {
+  if (isExpired) {
+    toast.error("Time expired. Please select seats again.");
+    await unlockSeats();
+    return navigate(`/shows/${showId}/seats`, { replace: true });
+  }
+
+  if (!stripe || !elements) return toast.error("Stripe not ready");
+  if (!clientSecret) return toast.error("Client secret not ready");
+
+  const card = elements.getElement(CardElement);
+  if (!card) return toast.error("Card input not found");
+
+  try {
+    setLoading(true);
+
+    const result = await stripe.confirmCardPayment(clientSecret, {
+      payment_method: { card },
+    });
+
+    // ❌ Payment failed
+    if (result.error) {
+      setPaymentFailed(true);
+      toast.error(result.error.message || "Payment failed");
+      return;
     }
 
-    if (!stripe || !elements) return toast.error("Stripe not ready");
-    if (!clientSecret) return toast.error("Client secret not ready");
+    // ✅ Payment succeeded (Stripe-confirmed)
+    if (result.paymentIntent?.status === "succeeded") {
+      if (confirmedRef.current) return;
+      confirmedRef.current = true;
 
-    const card = elements.getElement(CardElement);
-    if (!card) return toast.error("Card input not found");
+      localStorage.removeItem(`payment_${bookingId}`);
 
-    try {
-      setLoading(true);
-
-      const result = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: { card },
-      });
-
-      if (result.error) {
-        setPaymentFailed(true);
-        toast.error(result.error.message || "Payment failed");
-        return;
-      }
-
-      if (result.paymentIntent?.status === "succeeded") {
-        if (confirmedRef.current) return;
-        confirmedRef.current = true;
-
-        const paymentIntentId = result.paymentIntent.id;
-
-        const { data } = await api.post("/bookings/confirm", {
-          bookingId,
-          showId,
-          seats,
-          paymentIntentId,
-          skipLock: fromBookingPage,
-        });
-
-        if (data?.success) {
-          toast.success("Payment successful 🎉 Booking confirmed!");
-          localStorage.removeItem(`payment_${bookingId}`);
-          navigate("/my-bookings");
-        } else {
-          toast.error("Booking failed after payment");
-        }
-      }
-    } catch (err) {
-      console.log("Payment error:", err?.response?.data || err.message);
-      toast.error("Something went wrong");
-    } finally {
-      setLoading(false);
+      // 🔥 IMPORTANT CHANGE:
+      // ❌ DO NOT call /bookings/confirm
+      // ✅ Just redirect (Webhook will confirm booking)
+      navigate(`/payment/success/${bookingId}`, { replace: true });
     }
-  };
+  } catch (err) {
+    console.error("Payment error:", err?.response?.data || err.message);
+    toast.error("Something went wrong during payment");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ✅ Cancel Payment
   const handleCancel = async () => {

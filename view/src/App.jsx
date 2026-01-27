@@ -26,7 +26,7 @@ import TicketPage from "./pages/TicketPage";
 import Threaters from "./pages/Theatres";
 import TheatreDetails from "./pages/TheatreDetails";
 import MovieTheatres from "./pages/MovieTheatres";
-
+import PaymentSuccess from "./pages/PaymentSuccess";
 // admin
 import AdminDashboard from "./admin/AdminDashboard";
 import ListBooking from "./admin/ListBooking";
@@ -56,7 +56,10 @@ const App = () => {
           <Route path="/threater" element={<Threaters />} />
           <Route path="/threater/:theatreId" element={<TheatreDetails />} />
           <Route path="/movies/:movieId/theatres" element={<MovieTheatres />} />
-
+           <Route
+  path="/payment/success/:bookingId"
+  element={<PaymentSuccess />}
+/>
           <Route
             path="/my-bookings"
             element={

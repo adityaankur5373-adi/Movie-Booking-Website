@@ -334,6 +334,10 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
           title: true,
           posterPath: true,
           genres: { select: { id: true, name: true } },
+          voteAverage : true,
+          voteCount:true,
+           releaseDate:true,
+            runtime : true,
         },
       },
       screen: {
