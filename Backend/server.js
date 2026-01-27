@@ -19,11 +19,11 @@ const app = express();
 // Middleware
 app.use(
   cors({
-    origin: ["https://movie-booking-website-2vsx.vercel.app"],
+    origin: true,
     credentials: true,
   })
 );
-
+ app.options("*", cors());
 app.post(
 "/api/payments/webhook",
 express.raw({ type: "application/json" }),
