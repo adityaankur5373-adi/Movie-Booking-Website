@@ -15,7 +15,7 @@ export const bookingConfirmTemplate = (booking) => {
   const bookingId = booking?.id || "N/A";
 
   const frontend = process.env.FRONTEND_URL || "https://your-frontend.com";
-  const viewTicketUrl = `${frontend}/tickets/${bookingId}`;
+  const viewTicketUrl = `${frontend}/ticket/${bookingId}`;
 
   return `
   <div style="margin:0;padding:0;background:#f6f7fb;">
