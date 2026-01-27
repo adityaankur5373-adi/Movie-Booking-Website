@@ -1,22 +1,12 @@
-import nodemailer from "nodemailer";
-console.log("SENDING FROM:", process.env.EMAIL_USER);
-console.log("PASS LOADED:", process.env.EMAIL_PASS ? "✅ YES" : "❌ NO");
+import { Resend } from "resend";
 
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-export const sendMail = async ({ to, subject, html, attachments = [] }) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
-  await transporter.sendMail({
-    from: `"MovieShow" <${process.env.EMAIL_USER}>`,
+export const sendMail = async ({ to, subject, html }) => {
+  await resend.emails.send({
+    from: "Movie Tickets <onboarding@resend.dev>", // works without domain setup
     to,
     subject,
     html,
-    attachments, // ✅ added
   });
 };
