@@ -97,6 +97,7 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
             select: {
               id: true,
               name: true,
+              area:true,
               city: true,
               address: true,
             },
