@@ -60,15 +60,15 @@ const SeatLayout = () => {
     }
   };
 
-  useEffect(() => {
-    if (!showId) return;
+ useEffect(() => {
+  if (!showId || proceedLoading) return; // ⛔ pause refresh while proceeding
 
-    const interval = setInterval(() => {
-      refreshShow();
-    }, 3000);
+  const interval = setInterval(() => {
+    refreshShow();
+  }, 3000);
 
-    return () => clearInterval(interval);
-  }, [showId]);
+  return () => clearInterval(interval);
+}, [showId, proceedLoading]);
 
   // ✅ Layout from DB
   const layout = useMemo(() => show?.screen?.layout || null, [show]);
@@ -214,9 +214,8 @@ showId,
 seats: selectedSeats,
 });
 
-
+   proceedingRef.current = true;
 const bookingId = bookingRes.data.booking.id;
-    proceedingRef.current = true;
 
     localStorage.setItem(
       `payment_${showId}`,
@@ -241,21 +240,7 @@ const bookingId = bookingRes.data.booking.id;
 };
 
   // ✅ AUTO UNLOCK on leaving SeatLayout (if user didn't proceed)
- useEffect(() => {
-  return () => {
-    if (proceedingRef.current) return;
-    if (!user) return;
-
-    const saved = localStorage.getItem(`payment_${showId}`);
-    const parsed = saved ? JSON.parse(saved) : null;
-
-    const seatsToUnlock = parsed?.seats || selectedSeats;
-
-    if (!seatsToUnlock || seatsToUnlock.length === 0) return;
-
-    api.post(`/shows/${showId}/unlock`, { seats: seatsToUnlock }).catch(() => {});
-  };
-}, [showId, user, selectedSeats]);
+ 
   if (loading) return <Loading />;
   if (!show || !layout) return <Loading />;
 
