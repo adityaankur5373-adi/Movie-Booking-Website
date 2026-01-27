@@ -21,7 +21,7 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 });
 
 createRoot(document.getElementById('root')).render(
-    <GoogleOAuthProvider clientId="124913193706-dqc3aeqd182cn7mgc25qvadg61q7hs22.apps.googleusercontent.com">
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
        <BrowserRouter>
     <QueryClientProvider client={queryClient}>
         <Elements stripe={stripePromise}>
