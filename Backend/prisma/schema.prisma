@@ -112,6 +112,7 @@ model Booking {
   isPaid       Boolean  @default(false)
   createdAt    DateTime @default(now())
   reminderSent Boolean  @default(false)
+  emailSent Boolean @default(false)
   show         Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
