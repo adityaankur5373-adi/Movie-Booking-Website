@@ -1,17 +1,20 @@
 import sgMail from "@sendgrid/mail";
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const rawKey = process.env.SENDGRID_API_KEY || "";
+const cleanKey = rawKey.replace(/\s+/g, ""); // removes \n, spaces, etc.
+
+sgMail.setApiKey(cleanKey);
 
 export const sendMail = async ({ to, subject, html, attachments }) => {
   console.log("📧 Sending email to:", to);
 
   await sgMail.send({
     to,
-    from: "Movie Tickets <adityaankur5373@gmail.com>", // VERIFIED
+    from: "Movie Tickets <adityaankur5373@gmail.com>",
     replyTo: "adityaankur5373@gmail.com",
     subject,
     html,
-    attachments, // QR CID still works
+    attachments,
   });
 
   console.log("✅ Email sent via SendGrid");
