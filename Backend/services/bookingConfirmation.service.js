@@ -21,18 +21,18 @@ export const confirmBookingFromWebhook = async ({
     },
   });
 
-  // 🔒 Idempotency protection with logs
+  // 🔒 Safety checks
   if (!booking) {
     console.error("❌ Booking not found:", bookingId);
     return;
   }
 
   if (booking.isPaid) {
-    console.warn("⚠️ Booking already paid:", bookingId);
+    console.warn("⚠️ Booking already confirmed:", bookingId);
     return;
   }
 
-  // ✅ CONFIRM BOOKING
+  // ✅ CONFIRM BOOKING (atomic)
   const updatedBooking = await prisma.booking.update({
     where: { id: bookingId },
     data: {
@@ -51,32 +51,50 @@ export const confirmBookingFromWebhook = async ({
     },
   });
 
-  // 🚀 BACKGROUND TASKS
+  // 🚀 BACKGROUND TASKS (email + cleanup)
   setImmediate(async () => {
     try {
-      const qr = await generateBookingQRBuffer(updatedBooking.id);
+      // 🔐 Avoid duplicate emails
+      if (updatedBooking.emailSent) {
+        console.warn("📧 Email already sent for booking:", bookingId);
+        return;
+      }
 
+      // 1️⃣ Generate QR
+      const qrBuffer = await generateBookingQRBuffer(updatedBooking.id);
+
+      // 🔥 SendGrid requires BASE64 string
+      const qrBase64 = qrBuffer.toString("base64");
+
+      // 2️⃣ Send email
       await sendMail({
         to: updatedBooking.user.email,
         subject: "🎟 Booking Confirmed",
         html: bookingConfirmTemplate(updatedBooking),
         attachments: [
           {
+            content: qrBase64,                 // ✅ base64 string
             filename: `ticket-${updatedBooking.id}.png`,
-            content: qr,
-            cid: "booking_qr",
+            type: "image/png",
+            disposition: "inline",
+            contentId: "booking_qr",            // ✅ must match HTML
           },
         ],
       });
 
-      // 🔓 Release seat locks SAFELY
-      const lockKey = `lock:show:${updatedBooking.showId}`;
+      // 3️⃣ Mark email as sent
+      await prisma.booking.update({
+        where: { id: updatedBooking.id },
+        data: { emailSent: true },
+      });
 
+      // 4️⃣ Release seat locks
+      const lockKey = `lock:show:${updatedBooking.showId}`;
       if (updatedBooking.bookedSeats?.length) {
         await redis.hdel(lockKey, ...updatedBooking.bookedSeats);
       }
 
-      console.log("✅ Seats released for booking:", bookingId);
+      console.log("✅ Booking confirmed + email sent:", bookingId);
     } catch (err) {
       console.error("❌ Post-confirmation task failed:", err);
     }
