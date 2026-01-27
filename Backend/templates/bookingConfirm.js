@@ -35,44 +35,36 @@ export const bookingConfirmTemplate = (booking) => {
         <div style="padding:20px;font-family:Arial,sans-serif;color:#111827;">
           
           <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:14px;">
-            <p style="margin:0 0 10px;font-size:14px;">
-              <b>Movie:</b> ${movieTitle}
-            </p>
-            <p style="margin:0 0 10px;font-size:14px;">
-              <b>Theatre:</b> ${theatreName}
-            </p>
-            <p style="margin:0 0 10px;font-size:14px;">
-              <b>Screen:</b> ${screenName}
-            </p>
-            <p style="margin:0 0 10px;font-size:14px;">
-              <b>Seats:</b> ${seats}
-            </p>
-            <p style="margin:0 0 10px;font-size:14px;">
-              <b>Show Time:</b> ${showTime}
-            </p>
-            <p style="margin:0;font-size:14px;">
-              <b>Total Paid:</b> ₹${total}
-            </p>
+            <p style="margin:0 0 10px;font-size:14px;"><b>Movie:</b> ${movieTitle}</p>
+            <p style="margin:0 0 10px;font-size:14px;"><b>Theatre:</b> ${theatreName}</p>
+            <p style="margin:0 0 10px;font-size:14px;"><b>Screen:</b> ${screenName}</p>
+            <p style="margin:0 0 10px;font-size:14px;"><b>Seats:</b> ${seats}</p>
+            <p style="margin:0 0 10px;font-size:14px;"><b>Show Time:</b> ${showTime}</p>
+            <p style="margin:0;font-size:14px;"><b>Total Paid:</b> ₹${total}</p>
           </div>
 
           <div style="margin-top:16px;font-size:13px;color:#374151;">
             <p style="margin:0;"><b>Booking ID:</b> ${bookingId}</p>
             <p style="margin:6px 0 0;opacity:0.8;">
-              Scan QR at entry or open ticket using button below.
+              Scan the QR code below at the theatre entrance.
             </p>
           </div>
 
-          <!-- ✅ QR CODE (CID) -->
+          <!-- ✅ INLINE QR (CID) -->
           <div style="margin-top:18px;text-align:center;">
             <p style="margin:0 0 8px;font-size:13px;color:#374151;">
               🎫 Scan this QR at entry
             </p>
 
-            <img src="cid:booking_qr" alt="QR Code"
-              style="display:block;margin:0 auto;width:160px;height:160px;border:1px solid #e5e7eb;border-radius:12px;padding:8px;background:#fff;" />
+            <img
+              src="cid:booking_qr"
+              alt="Booking QR"
+              style="display:block;margin:0 auto;width:160px;height:160px;
+              border:1px solid #e5e7eb;border-radius:12px;padding:8px;background:#fff;"
+            />
 
             <p style="margin:10px 0 0;font-size:12px;color:#6b7280;">
-              If QR doesn't load, use the "View Ticket" button below.
+              If QR doesn’t load, click “View Ticket” below.
             </p>
           </div>
 
@@ -86,8 +78,8 @@ export const bookingConfirmTemplate = (booking) => {
 
           <div style="margin-top:18px;border-top:1px dashed #e5e7eb;padding-top:14px;">
             <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.6;">
-              Need help? Reply to this email or contact support.<br/>
-              ⚠️ Please arrive 15 minutes early to avoid last-minute issues.
+              Need help? Reply to this email.<br/>
+              ⚠️ Please arrive 15 minutes early.
             </p>
           </div>
 

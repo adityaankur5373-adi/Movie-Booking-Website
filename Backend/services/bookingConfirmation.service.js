@@ -64,6 +64,7 @@ export const confirmBookingFromWebhook = async ({
           {
             filename: `ticket-${updatedBooking.id}.png`,
             content: qr,
+            cid: "booking_qr",
           },
         ],
       });
