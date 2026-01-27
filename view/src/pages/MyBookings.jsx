@@ -20,7 +20,7 @@ const MyBookings = () => {
   const currency = import.meta.env.VITE_CURRENCY || "₹";
   const navigate = useNavigate();
 
-  // ✅ Auto rerender every second so timer updates live
+  // 🔁 Auto re-render every second so timer updates live
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -48,9 +48,7 @@ const MyBookings = () => {
     return (
       <div className="relative px-6 md:px-16 lg:px-40 pt-32 md:pt-40 min-h-[80vh]">
         <BlurCircle top="100px" left="100px" />
-        <div>
-          <BlurCircle bottom="0px" left="600px" />
-        </div>
+        <BlurCircle bottom="0px" left="600px" />
 
         <h1 className="text-lg font-semibold mb-4">My Bookings</h1>
         <p className="text-gray-400 text-sm">Failed to load bookings.</p>
@@ -61,17 +59,15 @@ const MyBookings = () => {
   return (
     <div className="relative px-6 md:px-16 lg:px-40 pt-32 md:pt-40 min-h-[80vh]">
       <BlurCircle top="100px" left="100px" />
-      <div>
-        <BlurCircle bottom="0px" left="600px" />
-      </div>
+      <BlurCircle bottom="0px" left="600px" />
 
       <h1 className="text-lg font-semibold mb-4">My Bookings</h1>
 
       {bookings.length === 0 ? (
         <p className="text-gray-400 text-sm">No bookings found.</p>
       ) : (
-        bookings.map((item, index) => {
-          // ✅ Timer check for each booking
+        bookings.map((item) => {
+          // ⏱ Timer logic
           const saved = localStorage.getItem(`payment_${item.id}`);
           const parsed = saved ? JSON.parse(saved) : null;
 
@@ -83,7 +79,7 @@ const MyBookings = () => {
 
           return (
             <div
-              key={item.id || index}
+              key={item.id}
               className="flex flex-col md:flex-row justify-between bg-primary/8 border border-primary/20 rounded-lg mt-4 p-2 max-w-3xl"
             >
               {/* LEFT SIDE */}
@@ -92,7 +88,7 @@ const MyBookings = () => {
                 {item?.show?.movie?.posterPath ? (
                   <img
                     src={item.show.movie.posterPath}
-                    alt=""
+                    alt={item.show.movie.title}
                     className="md:max-w-[180px] aspect-video h-auto object-cover object-bottom rounded"
                   />
                 ) : (
@@ -106,24 +102,16 @@ const MyBookings = () => {
                     {item?.show?.movie?.title || "Movie"}
                   </p>
 
-                  {/* Runtime */}
-                  {item?.show?.movie?.runtime ? (
-                    <p className="text-gray-400 text-sm">
-                      {timeFormat(item.show.movie.runtime)}
-                    </p>
-                  ) : (
-                    <p className="text-gray-400 text-sm">
-                      {item?.show?.screen?.theatre?.name || "Theatre"} •{" "}
-                      {item?.show?.screen?.name || "Screen"}
-                    </p>
-                  )}
-
-                  <p className="text-gray-400 text-sm mt-2">
-                    {item?.show?.screen?.theatre?.name || "Theatre"} •{" "}
-                    {item?.show?.screen?.name || "Screen"}
+                  {/* Runtime OR Theatre • Screen (FIXED – only once) */}
+                  <p className="text-gray-400 text-sm">
+                    {item?.show?.movie?.runtime
+                      ? timeFormat(item.show.movie.runtime)
+                      : `${item?.show?.screen?.theatre?.name || "Theatre"} • ${
+                          item?.show?.screen?.name || "Screen"
+                        }`}
                   </p>
 
-                  <p className="text-gray-400 text-sm mt-auto">
+                  <p className="text-gray-400 text-sm mt-2">
                     {dateFormat(item?.show?.startTime)}
                   </p>
                 </div>
@@ -137,7 +125,7 @@ const MyBookings = () => {
                     {item?.totalAmount}
                   </p>
 
-                  {/* ✅ Show Pay Now only if pending + NOT expired */}
+                  {/* 💳 Pay Now */}
                   {!item?.isPaid && !isExpired && (
                     <button
                       onClick={() => {
@@ -155,7 +143,7 @@ const MyBookings = () => {
                     </button>
                   )}
 
-                  {/* ✅ Expired message */}
+                  {/* ⛔ Expired */}
                   {!item?.isPaid && isExpired && (
                     <p className="text-red-500 text-sm font-medium mb-3">
                       Payment expired
@@ -180,7 +168,7 @@ const MyBookings = () => {
                   </p>
                 </div>
 
-                {/* ✅ View Ticket */}
+                {/* 🎟 View Ticket */}
                 {item?.isPaid && (
                   <button
                     onClick={() => navigate(`/ticket/${item.id}`)}

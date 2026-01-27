@@ -3,28 +3,36 @@ import { confirmBookingFromWebhook } from "../services/bookingConfirmation.servi
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-export const stripeWebhook = async (req, res) => {
+const stripeWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
 
   try {
     event = stripe.webhooks.constructEvent(
-      req.body,
+      req.body, // RAW buffer
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
+    console.error("❌ Stripe signature error:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === "payment_intent.succeeded") {
-    const pi = event.data.object;
+  try {
+    if (event.type === "payment_intent.succeeded") {
+      const pi = event.data.object;
 
-    await confirmBookingFromWebhook({
-      bookingId: pi.metadata.bookingId,
-      paymentIntentId: pi.id,
-    });
+      await confirmBookingFromWebhook({
+        bookingId: pi.metadata.bookingId,
+        paymentIntentId: pi.id,
+      });
+    }
+
+    return res.status(200).send("ok");
+  } catch (err) {
+    console.error("❌ Webhook processing failed:", err);
+    return res.status(500).send("Webhook handler failed");
   }
-
-  res.status(200).send("ok");
 };
+
+export default stripeWebhook;
