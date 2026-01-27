@@ -1,13 +1,18 @@
-import { Resend } from "resend";
+import sgMail from "@sendgrid/mail";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-console.log("RESEND_API_KEY:", process.env.RESEND_API_KEY?.slice(0, 6));
-export const sendMail = async ({ to, subject, html }) => {
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+export const sendMail = async ({ to, subject, html, attachments }) => {
   console.log("📧 Sending email to:", to);
-  await resend.emails.send({
-    from: "Movie Tickets <onboarding@resend.dev>", // works without domain setup
+
+  await sgMail.send({
     to,
+    from: "Movie Tickets <adityaankur5373@gmail.com>", // VERIFIED
+    replyTo: "adityaankur5373@gmail.com",
     subject,
     html,
+    attachments, // QR CID still works
   });
+
+  console.log("✅ Email sent via SendGrid");
 };
