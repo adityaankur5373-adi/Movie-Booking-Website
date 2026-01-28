@@ -69,10 +69,6 @@ export const confirmBookingFromWebhook = async ({
 
   // ❌ nothing changed → stop here
   if (!confirmedBooking) return;
-      const version = await getBookingsCacheVersion();
-await redis.del(
-myBookingsKey(version, confirmedBooking.userId)
-);
   // 🚀 BACKGROUND TASKS (NON-BLOCKING)
   setImmediate(async () => {
     try {
