@@ -7,14 +7,14 @@ import BlurCircle from "../components/BlurCircle";
 import { MapPin, Monitor } from "lucide-react";
 import { useState } from "react";
 const fetchMyBookings = async () => {
-  const [payingId, setPayingId] = useState(null);
   const { data } = await api.get("/bookings/me");
   return data.bookings || [];
 };
 
 const MyBookings = () => {
-  const navigate = useNavigate();
 
+  const navigate = useNavigate();
+    const [payingId, setPayingId] = useState(null);
  const {
   data: bookings = [],
   isLoading,
