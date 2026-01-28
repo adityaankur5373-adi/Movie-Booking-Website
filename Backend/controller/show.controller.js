@@ -334,7 +334,11 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   if (!theatreId) throw new AppError("theatreId is required", 400);
 
   const version = await getShowsCacheVersion();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = new Date(
+  new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+)
+  .toISOString()
+  .slice(0, 10);
   const cacheKey = showsByTheatreKey(version, theatreId, todayStr);
 
   const cached = await redis.get(cacheKey);
