@@ -161,6 +161,7 @@ for (const seat of seats) {
     success: true,
     clientSecret: paymentIntent.client_secret,
     amount,
+    seats,
     ttlSeconds,
   });
 });

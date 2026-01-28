@@ -172,16 +172,16 @@ const Payment = () => {
           </div>
 
           {/* RIGHT */}
-          <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <p className="font-semibold text-gray-900 mb-4">
-              Order Summary
-            </p>
+         <div className="bg-white rounded-2xl shadow-sm border p-6">
+  <p className="font-semibold text-gray-900 mb-4">
+    Order Summary
+  </p>
 
-            <p className="text-sm text-gray-600">
-              Seats: {seats.join(", ")}
-            </p>
+  <p className="text-gray-600">
+    Seats: {seats.join(", ")}
+  </p>
 
-            <p className="text-lg font-semibold mt-2">₹{amount}</p>
+  <p className="text-lg font-semibold mt-2">₹{amount}</p>
 
             <div className="mt-6 flex items-center justify-between 
                             bg-red-50 text-red-700 px-4 py-3 rounded-xl">
