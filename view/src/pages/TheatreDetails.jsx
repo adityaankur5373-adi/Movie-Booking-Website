@@ -18,6 +18,7 @@ const fetchTheatre = async (theatreId) => {
 
 const fetchTheatreShows = async (theatreId) => {
   const { data } = await api.get(`/shows/theatre/${theatreId}`);
+  console.log(data)
   if (!data?.success) return [];
   return data.shows || [];
 };
@@ -68,7 +69,8 @@ const TheatreDetails = () => {
 
       return acc;
     }, {});
-
+     console.log("theatreShows", theatreShows);
+console.log("moviesWithShows", moviesWithShows);
     return Object.keys(grouped).map((movieId) => ({
       movie: theatreShows.find((s) => s?.movie?.id === movieId)?.movie,
       shows: grouped[movieId].sort(
