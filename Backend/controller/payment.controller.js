@@ -45,13 +45,25 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
   const redisKey = lockKey(booking.showId);
 
   // 🔒 Enforce seat lock ownership
-  for (const seat of seats) {
-    const lockedBy = await redis.hget(redisKey, seat);
-    if (lockedBy !== userId) {
-      throw new AppError(`Seat ${seat} is not locked by you`, 409);
-    }
-  }
+  // after checking seat locks
+for (const seat of seats) {
+  const lockedBy = await redis.hget(redisKey, seat);
 
+  if (lockedBy !== userId) {
+    // 🔥 Mark booking expired (ONCE)
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: "EXPIRED",
+        expiredAt: new Date(),
+      },
+    });
+
+    // 🚫 Stop immediately
+    throw new AppError("Booking expired", 410);
+  }
+}
+ 
   // 🔁 REFRESH LOCK TTL (important)
  
  const ttlSeconds = await redis.ttl(redisKey);
@@ -150,5 +162,61 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
     clientSecret: paymentIntent.client_secret,
     amount,
     ttlSeconds,
+  });
+});
+
+export const cancelPayment = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { bookingId } = req.body;
+
+  if (!bookingId) throw new AppError("bookingId is required", 400);
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+  });
+
+  if (!booking) throw new AppError("Booking not found", 404);
+  if (booking.userId !== userId) throw new AppError("Not allowed", 403);
+
+  // already paid → cannot cancel
+  if (booking.isPaid) {
+    throw new AppError("Booking already paid", 400);
+  }
+
+  // 1️⃣ Mark booking cancelled
+  await prisma.booking.update({
+    where: { id: bookingId },
+    data: {
+      status: "CANCELLED",
+      expiredAt: new Date(),
+    },
+  });
+
+  // 2️⃣ Unlock seats using SAME logic
+  const key = `lock:show:${booking.showId}`;
+
+  if (booking.bookedSeats?.length) {
+    const pipeline = redis.pipeline();
+    booking.bookedSeats.forEach((seat) =>
+      pipeline.hget(key, seat)
+    );
+
+    const results = await pipeline.exec();
+
+    const toDelete = [];
+    results.forEach((r, i) => {
+      if (r?.[1] === userId) {
+        toDelete.push(booking.bookedSeats[i]);
+      }
+    });
+
+    if (toDelete.length > 0) {
+      await redis.hdel(key, ...toDelete);
+    }
+  }
+
+  return res.json({
+    success: true,
+    message: "Payment cancelled and seats released",
   });
 });

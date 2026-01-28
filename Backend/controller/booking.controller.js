@@ -3,14 +3,13 @@ import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
 
 import redis from "../config/redis.js";
-import { lockSeatsLua } from "../utils/seatLock.lua.js";
+
 import { calcTotalFromLayout } from "../utils/calcTotal.js";
 
-import { sendMail } from "../services/mail.service.js";
-import { bookingConfirmTemplate } from "../templates/bookingConfirm.js";
+
 
 import Stripe from "stripe";
-import { generateBookingQRBuffer } from "../utils/generateQr.js";
+
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -271,8 +270,20 @@ export const getMyBookings = asyncHandler(async (req, res) => {
     });
   }
 
+  const DAY = 24 * 60 * 60 * 1000;
+  const cutoff = new Date(Date.now() - DAY);
+
   const bookings = await prisma.booking.findMany({
-    where: { userId },
+    where: {
+      userId,
+      OR: [
+        { status: { not: "EXPIRED" } }, // CONFIRMED / PENDING / CANCELLED
+        {
+          status: "EXPIRED",
+          expiredAt: { gte: cutoff },   // only recent expired
+        },
+      ],
+    },
     select: {
       id: true,
       bookedSeats: true,
@@ -284,12 +295,24 @@ export const getMyBookings = asyncHandler(async (req, res) => {
         select: {
           id: true,
           startTime: true,
-          movie: { select: { id: true, title: true, posterPath: true } },
+          movie: {
+            select: {
+              id: true,
+              title: true,
+              posterPath: true,
+            },
+          },
           screen: {
             select: {
               id: true,
               name: true,
-              theatre: { select: { id: true, name: true, city: true } },
+              theatre: {
+                select: {
+                  id: true,
+                  name: true,
+                  city: true,
+                },
+              },
             },
           },
         },
@@ -300,5 +323,9 @@ export const getMyBookings = asyncHandler(async (req, res) => {
 
   await redis.set(cacheKey, JSON.stringify(bookings), "EX", 30);
 
-  return res.json({ success: true, source: "db", bookings });
+  return res.json({
+    success: true,
+    source: "db",
+    bookings,
+  });
 });

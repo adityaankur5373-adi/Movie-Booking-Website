@@ -77,7 +77,7 @@ const Payment = () => {
   const minutes = Math.floor(timeLeft / 60000);
   const seconds = Math.floor((timeLeft % 60000) / 1000);
 
-  // 💳 Pay
+  // 💳 Pay Now
   const handlePayNow = async () => {
     if (!stripe || !elements || timeLeft <= 0) return;
 
@@ -105,6 +105,18 @@ const Payment = () => {
     }
   };
 
+  // ❌ CANCEL PAYMENT (HARD FLOW)
+  const handleCancelPayment = async () => {
+    try {
+      await api.post("/payments/cancel", { bookingId });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      toast("Payment cancelled");
+      navigate(`/shows/${showId}/seats`, { replace: true });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f5f5f5] pt-24 pb-20">
       <div className="max-w-6xl mx-auto px-4">
@@ -113,24 +125,14 @@ const Payment = () => {
         </h1>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* LEFT CARD */}
+          {/* LEFT */}
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border p-6">
             <p className="text-sm font-medium text-gray-600 mb-3">
               Card Details
             </p>
 
             <div className="border rounded-xl p-4">
-              <CardElement
-                options={{
-                  style: {
-                    base: {
-                      fontSize: "16px",
-                      color: "#111827",
-                      "::placeholder": { color: "#9CA3AF" },
-                    },
-                  },
-                }}
-              />
+              <CardElement />
             </div>
 
             {paymentFailed && (
@@ -139,15 +141,18 @@ const Payment = () => {
               </p>
             )}
 
-            <div className="mt-6 flex items-center gap-4">
+            <div className="mt-6 flex items-center gap-6">
               <button
                 disabled={loading || !clientSecret || timeLeft <= 0}
                 onClick={handlePayNow}
-                className="bg-red-600 hover:bg-red-700 transition text-white px-6 py-3 rounded-xl font-medium disabled:opacity-50"
+                className="bg-red-600 hover:bg-red-700 transition 
+                           text-white px-6 py-3 rounded-xl font-medium 
+                           disabled:opacity-50"
               >
                 {loading ? "Processing..." : `Pay ₹${amount}`}
               </button>
 
+              {/* ✅ BACK FLOW (NO SIDE EFFECTS) */}
               <button
                 onClick={() => navigate("/my-bookings")}
                 className="flex items-center gap-1 text-gray-600 hover:text-gray-900"
@@ -155,27 +160,31 @@ const Payment = () => {
                 <ArrowLeft className="w-4 h-4" />
                 Back
               </button>
+
+              {/* ❌ CANCEL FLOW (FINAL) */}
+              <button
+                onClick={handleCancelPayment}
+                className="text-sm text-red-600 hover:underline"
+              >
+                Cancel Payment
+              </button>
             </div>
           </div>
 
-          {/* RIGHT SUMMARY */}
+          {/* RIGHT */}
           <div className="bg-white rounded-2xl shadow-sm border p-6">
             <p className="font-semibold text-gray-900 mb-4">
               Order Summary
             </p>
 
-            <div className="text-sm text-gray-600 space-y-2">
-              <p>
-                <span className="font-medium text-gray-900">Seats:</span>{" "}
-                {seats.join(", ")}
-              </p>
+            <p className="text-sm text-gray-600">
+              Seats: {seats.join(", ")}
+            </p>
 
-              <p className="text-lg font-semibold text-gray-900">
-                ₹{amount}
-              </p>
-            </div>
+            <p className="text-lg font-semibold mt-2">₹{amount}</p>
 
-            <div className="mt-6 flex items-center justify-between bg-red-50 text-red-700 px-4 py-3 rounded-xl">
+            <div className="mt-6 flex items-center justify-between 
+                            bg-red-50 text-red-700 px-4 py-3 rounded-xl">
               <div className="flex items-center gap-2">
                 <Clock3 className="w-4 h-4" />
                 <span className="text-sm font-medium">

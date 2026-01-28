@@ -111,6 +111,7 @@ model Booking {
   status BookingStatus @default(PENDING)
   totalAmount  Int
   isPaid       Boolean  @default(false)
+  expiredAt DateTime?
   createdAt    DateTime @default(now())
   reminderSent Boolean  @default(false)
   emailSent Boolean @default(false)
@@ -141,5 +142,6 @@ enum BookingStatus {
   PENDING
   CONFIRMED
   CANCELLED
+  EXPIRED
 }
 

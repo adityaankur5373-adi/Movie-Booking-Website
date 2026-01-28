@@ -39,6 +39,9 @@ const MyBookings = () => {
           const screen = show.screen;
           const theatre = screen?.theatre;
 
+          // ✅ REQUIRED ADDITION
+          const isExpired = !item.isPaid && item.status === "EXPIRED";
+
           return (
             <div
               key={item.id}
@@ -101,7 +104,17 @@ const MyBookings = () => {
                     Seat Number: {item.bookedSeats.join(", ")}
                   </p>
 
-                  {!item.isPaid && (
+                  {/* ✅ EXPIRED */}
+                  {isExpired && (
+                    <span className="inline-block mt-3 px-4 py-1.5 
+                                     rounded-full text-xs font-medium 
+                                     bg-gray-500/20 text-gray-400">
+                      Expired
+                    </span>
+                  )}
+
+                  {/* ✅ PENDING */}
+                  {!item.isPaid && !isExpired && (
                     <button
                       onClick={() =>
                         navigate(`/payment/${item.showId}`, {
@@ -117,6 +130,7 @@ const MyBookings = () => {
                     </button>
                   )}
 
+                  {/* ✅ CONFIRMED */}
                   {item.isPaid && (
                     <span className="inline-block mt-3 px-4 py-1.5 
                                      rounded-full text-xs font-medium 
