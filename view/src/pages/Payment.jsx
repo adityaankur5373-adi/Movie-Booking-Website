@@ -198,16 +198,15 @@ const Payment = () => {
 
         {/* SUMMARY */}
         <div className="bg-white rounded-2xl shadow p-6 h-fit">
-          <p className="font-medium">Seats</p>
-          <p>{seats.length ? seats.join(", ") : "—"}</p>
-
+          <p className=" text-black font-medium">Seats</p>
+          <p className='text-black'>{seats.length ? seats.join(", ") : "—"}</p>
           <div className="mt-4 flex justify-between">
-            <span>Total</span>
-            <span>₹{amount || "—"}</span>
+            <span className='text-black'>Total</span>
+            <span  className='text-black'>₹{amount || "—"}</span>
           </div>
 
           <div className="mt-4 flex justify-between text-red-600">
-            <span>Time left</span>
+            <span className='text-black'>Time left</span>
             <span>
               {String(minutes).padStart(2, "0")}:
               {String(seconds).padStart(2, "0")}
