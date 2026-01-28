@@ -172,37 +172,47 @@ const Payment = () => {
           </div>
 
           {/* RIGHT */}
-         <div className="bg-white rounded-2xl shadow-sm border p-6">
-  <p className="font-semibold text-gray-900 mb-4">
+   {/* RIGHT */}
+<div className="bg-white rounded-2xl shadow-md border border-gray-200 p-6">
+  <h2 className="text-lg font-semibold text-gray-900 mb-4">
     Order Summary
+  </h2>
+
+  <div className="space-y-2">
+    <p className="text-sm text-gray-700">
+      <span className="font-medium text-gray-900">Seats:</span>{" "}
+      {data.seats.join(", ")}
+    </p>
+
+    <p className="text-2xl font-bold text-gray-900">
+      ₹{amount}
+    </p>
+  </div>
+
+  {/* TIMER */}
+  <div
+    className="mt-6 flex items-center justify-between 
+               bg-red-100 border border-red-200 
+               text-red-700 px-4 py-3 rounded-xl"
+  >
+    <div className="flex items-center gap-2">
+      <Clock3 className="w-4 h-4" />
+      <span className="text-sm font-medium">
+        Time remaining
+      </span>
+    </div>
+
+    <span className="font-semibold tracking-wide">
+      {String(minutes).padStart(2, "0")}:
+      {String(seconds).padStart(2, "0")}
+    </span>
+  </div>
+
+  <p className="mt-4 text-xs text-gray-600 leading-relaxed">
+    Seats are reserved temporarily. Please complete the payment
+    before the timer expires to confirm your booking.
   </p>
-
-  <p className="text-gray-600">
-    Seats: {seats.join(", ")}
-  </p>
-
-  <p className="text-lg font-semibold mt-2">₹{amount}</p>
-
-            <div className="mt-6 flex items-center justify-between 
-                            bg-red-50 text-red-700 px-4 py-3 rounded-xl">
-              <div className="flex items-center gap-2">
-                <Clock3 className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  Time remaining
-                </span>
-              </div>
-
-              <span className="font-semibold">
-                {String(minutes).padStart(2, "0")}:
-                {String(seconds).padStart(2, "0")}
-              </span>
-            </div>
-
-            <p className="mt-4 text-xs text-gray-500">
-              Seats are reserved temporarily. Complete payment before
-              time runs out.
-            </p>
-          </div>
+</div>
         </div>
       </div>
     </div>

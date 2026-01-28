@@ -165,7 +165,6 @@ for (const seat of seats) {
     ttlSeconds,
   });
 });
-
 export const cancelPayment = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { bookingId } = req.body;
@@ -184,7 +183,7 @@ export const cancelPayment = asyncHandler(async (req, res) => {
     throw new AppError("Booking already paid", 400);
   }
 
-  // 1️⃣ Mark booking cancelled
+  // 1️⃣ Mark booking as CANCELLED (ONLY ONCE)
   await prisma.booking.update({
     where: { id: bookingId },
     data: {
@@ -193,7 +192,7 @@ export const cancelPayment = asyncHandler(async (req, res) => {
     },
   });
 
-  // 2️⃣ Unlock seats using SAME logic
+  // 2️⃣ Release seat locks (Redis)
   const key = `lock:show:${booking.showId}`;
 
   if (booking.bookedSeats?.length) {
@@ -206,8 +205,9 @@ export const cancelPayment = asyncHandler(async (req, res) => {
 
     const toDelete = [];
     results.forEach((r, i) => {
-      if (r?.[1] === userId) {
-        toDelete.push(booking.bookedSeats[i]);
+      const lockedBy = r?.[1];
+      if (lockedBy === userId) {
+        toDelete.push(booking.bookedSeats[i]); // ✅ FIXED
       }
     });
 
@@ -215,6 +215,10 @@ export const cancelPayment = asyncHandler(async (req, res) => {
       await redis.hdel(key, ...toDelete);
     }
   }
+
+  // 3️⃣ Invalidate My Bookings cache
+  const version = await getBookingsCacheVersion();
+  await redis.del(myBookingsKey(version, booking.userId));
 
   return res.json({
     success: true,
