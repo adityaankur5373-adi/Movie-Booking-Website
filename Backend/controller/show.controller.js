@@ -333,13 +333,26 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
 
   const version = await getShowsCacheVersion();
 
-  // ✅ single `now`
+  // ===== CURRENT TIME (UTC) =====
   const now = new Date();
 
-  // ✅ IST-safe date key
-  const istDate = new Date(now.getTime() + 330 * 60 * 1000);
-  const todayStr = istDate.toISOString().slice(0, 10);
+  // ===== IST DAY BOUNDARIES =====
+  const IST_OFFSET = 330 * 60 * 1000; // +5:30
 
+  const istNow = new Date(now.getTime() + IST_OFFSET);
+
+  const istStartOfDay = new Date(istNow);
+  istStartOfDay.setHours(0, 0, 0, 0);
+
+  const istEndOfDay = new Date(istNow);
+  istEndOfDay.setHours(23, 59, 59, 999);
+
+  // convert IST → UTC (DB is UTC)
+  const utcStartOfDay = new Date(istStartOfDay.getTime() - IST_OFFSET);
+  const utcEndOfDay = new Date(istEndOfDay.getTime() - IST_OFFSET);
+
+  // ===== CACHE KEY (date based) =====
+  const todayStr = istStartOfDay.toISOString().slice(0, 10);
   const cacheKey = showsByTheatreKey(version, theatreId, todayStr);
 
   const cached = await redis.get(cacheKey);
@@ -351,21 +364,18 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     });
   }
 
-  // ✅ auto-remove after grace
-  const REMOVE_AFTER_MINUTES = 15;
-  const removeAfter = new Date(
-    now.getTime() - REMOVE_AFTER_MINUTES * 60 * 1000
-  );
+  // ===== GRACE PERIOD (15 min after start) =====
+  const GRACE_MINUTES = 15;
+  const graceStart = new Date(now.getTime() - GRACE_MINUTES * 60 * 1000);
 
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
-
+  // ===== DB QUERY (TODAY ONLY) =====
   const shows = await prisma.show.findMany({
     where: {
       screen: { is: { theatreId } },
       startTime: {
-        gte: removeAfter,
-        lte: endOfDay,
+        gte: utcStartOfDay,
+        lte: utcEndOfDay,
+        not: { lt: graceStart }, // remove expired shows
       },
     },
     select: {
@@ -395,22 +405,15 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  // ✅ add runtime flags (NOT stored in DB)
-  const BOOKING_GRACE_MINUTES = 15;
-
+  // ===== RUNTIME FLAGS (NOT STORED) =====
   const showsWithStatus = shows.map((show) => ({
     ...show,
     hasStarted: now >= show.startTime,
     isBookable: now < show.startTime, // booking closes at start
   }));
 
-  // ✅ cache the FINAL response
-  await redis.set(
-    cacheKey,
-    JSON.stringify(showsWithStatus),
-    "EX",
-    10
-  );
+  // ===== CACHE FINAL RESPONSE =====
+  await redis.set(cacheKey, JSON.stringify(showsWithStatus), "EX", 10);
 
   return res.json({
     success: true,
@@ -418,7 +421,6 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     shows: showsWithStatus,
   });
 });
-
 // =====================================
 // POST /api/shows/:showId/lock
 // =====================================

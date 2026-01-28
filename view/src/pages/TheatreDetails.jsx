@@ -18,7 +18,6 @@ const fetchTheatre = async (theatreId) => {
 
 const fetchTheatreShows = async (theatreId) => {
   const { data } = await api.get(`/shows/theatre/${theatreId}`);
-  console.log(data)
   if (!data?.success) return [];
   return data.shows || [];
 };
