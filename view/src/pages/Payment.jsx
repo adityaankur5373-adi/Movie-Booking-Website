@@ -21,13 +21,13 @@ const Payment = () => {
 
   const [clientSecret, setClientSecret] = useState("");
   const [amount, setAmount] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(0); // ⏱ backend-driven
+  const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
 
   const confirmedRef = useRef(false);
 
-  // ❌ Invalid direct access
+  // ❌ Invalid access
   useEffect(() => {
     if (!bookingId) {
       toast.error("Invalid booking");
@@ -35,7 +35,7 @@ const Payment = () => {
     }
   }, [bookingId, showId, navigate]);
 
-  // ✅ Create PaymentIntent (backend = source of truth)
+  // ✅ Create PaymentIntent
   useEffect(() => {
     const createIntent = async () => {
       try {
@@ -45,7 +45,7 @@ const Payment = () => {
 
         setClientSecret(data.clientSecret);
         setAmount(data.amount);
-        setTimeLeft(data.ttlSeconds * 1000); // 🔥 backend TTL
+        setTimeLeft(data.ttlSeconds * 1000);
       } catch (err) {
         toast.error(err?.response?.data?.message || "Payment expired");
         navigate(`/shows/${showId}/seats`, { replace: true });
@@ -55,7 +55,7 @@ const Payment = () => {
     if (bookingId) createIntent();
   }, [bookingId, navigate, showId]);
 
-  // ⏱ UI countdown (visual only)
+  // ⏱ Countdown (UI only)
   useEffect(() => {
     if (!timeLeft) return;
 
@@ -77,14 +77,14 @@ const Payment = () => {
   const minutes = Math.floor(timeLeft / 60000);
   const seconds = Math.floor((timeLeft % 60000) / 1000);
 
-  // 💳 Pay Now
+  // 💳 Pay
   const handlePayNow = async () => {
     if (!stripe || !elements || timeLeft <= 0) return;
 
     try {
       setLoading(true);
-
       const card = elements.getElement(CardElement);
+
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: { card },
       });
@@ -98,7 +98,6 @@ const Payment = () => {
       if (result.paymentIntent?.status === "succeeded") {
         if (confirmedRef.current) return;
         confirmedRef.current = true;
-
         navigate(`/payment/success/${bookingId}`, { replace: true });
       }
     } finally {
@@ -107,48 +106,93 @@ const Payment = () => {
   };
 
   return (
-    <div className="min-h-[85vh] px-6 md:px-16 lg:px-40 pt-28 pb-24">
-      <h1 className="text-2xl font-semibold mb-6">Complete Payment</h1>
+    <div className="min-h-screen bg-[#f5f5f5] pt-24 pb-20">
+      <div className="max-w-6xl mx-auto px-4">
+        <h1 className="text-2xl font-semibold text-gray-900 mb-6">
+          Complete Payment
+        </h1>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* LEFT */}
-        <div className="lg:col-span-2 border rounded-xl p-6">
-          <CardElement />
-
-          {paymentFailed && (
-            <p className="text-red-500 text-sm mt-3">
-              Payment failed. Try again.
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* LEFT CARD */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border p-6">
+            <p className="text-sm font-medium text-gray-600 mb-3">
+              Card Details
             </p>
-          )}
 
-          <div className="mt-6 flex gap-3">
-            <button
-              disabled={loading || !clientSecret || timeLeft <= 0}
-              onClick={handlePayNow}
-              className="bg-primary px-6 py-3 rounded-xl text-white"
-            >
-              {loading ? "Processing..." : "Pay Now"}
-            </button>
+            <div className="border rounded-xl p-4">
+              <CardElement
+                options={{
+                  style: {
+                    base: {
+                      fontSize: "16px",
+                      color: "#111827",
+                      "::placeholder": { color: "#9CA3AF" },
+                    },
+                  },
+                }}
+              />
+            </div>
 
-            <button
-              onClick={() => navigate("/my-bookings")}
-              className="border px-6 py-3 rounded-xl"
-            >
-              <ArrowLeft className="inline w-4 h-4" /> Back
-            </button>
+            {paymentFailed && (
+              <p className="text-red-500 text-sm mt-3">
+                Payment failed. Please try again.
+              </p>
+            )}
+
+            <div className="mt-6 flex items-center gap-4">
+              <button
+                disabled={loading || !clientSecret || timeLeft <= 0}
+                onClick={handlePayNow}
+                className="bg-red-600 hover:bg-red-700 transition text-white px-6 py-3 rounded-xl font-medium disabled:opacity-50"
+              >
+                {loading ? "Processing..." : `Pay ₹${amount}`}
+              </button>
+
+              <button
+                onClick={() => navigate("/my-bookings")}
+                className="flex items-center gap-1 text-gray-600 hover:text-gray-900"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* RIGHT */}
-        <div className="border rounded-xl p-6">
-          <p className="font-semibold mb-2">Order Summary</p>
-          <p>Seats: {seats.join(", ")}</p>
-          <p className="mt-2 font-bold">₹{amount}</p>
+          {/* RIGHT SUMMARY */}
+          <div className="bg-white rounded-2xl shadow-sm border p-6">
+            <p className="font-semibold text-gray-900 mb-4">
+              Order Summary
+            </p>
 
-          <div className="mt-4 flex items-center gap-2">
-            <Clock3 className="w-4 h-4" />
-            {String(minutes).padStart(2, "0")}:
-            {String(seconds).padStart(2, "0")}
+            <div className="text-sm text-gray-600 space-y-2">
+              <p>
+                <span className="font-medium text-gray-900">Seats:</span>{" "}
+                {seats.join(", ")}
+              </p>
+
+              <p className="text-lg font-semibold text-gray-900">
+                ₹{amount}
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-between bg-red-50 text-red-700 px-4 py-3 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Clock3 className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  Time remaining
+                </span>
+              </div>
+
+              <span className="font-semibold">
+                {String(minutes).padStart(2, "0")}:
+                {String(seconds).padStart(2, "0")}
+              </span>
+            </div>
+
+            <p className="mt-4 text-xs text-gray-500">
+              Seats are reserved temporarily. Complete payment before
+              time runs out.
+            </p>
           </div>
         </div>
       </div>
