@@ -5,8 +5,9 @@ import api from "../api/api";
 import Loading from "../components/Loading";
 import BlurCircle from "../components/BlurCircle";
 import { MapPin, Monitor } from "lucide-react";
-
+import { useState } from "react";
 const fetchMyBookings = async () => {
+  const [payingId, setPayingId] = useState(null);
   const { data } = await api.get("/bookings/me");
   return data.bookings || [];
 };
@@ -14,15 +15,29 @@ const fetchMyBookings = async () => {
 const MyBookings = () => {
   const navigate = useNavigate();
 
-  const { data: bookings = [], isLoading } = useQuery({
-    queryKey: ["myBookings"],
-    queryFn: fetchMyBookings,
-    staleTime: 0, // 🔥 IMPORTANT
- refetchOnMount: "always",
-  });
+ const {
+  data: bookings = [],
+  isLoading,
+  isError,
+  error,
+} = useQuery({
+  queryKey: ["myBookings"],
+  queryFn: fetchMyBookings,
+  staleTime: 0,
+  refetchOnMount: "always",
+});
 
   if (isLoading) return <Loading />;
-
+   if (isError) {
+  return (
+    <div className="flex flex-col items-center justify-center h-screen text-white">
+      <p className="text-lg font-medium">Failed to load bookings</p>
+      <p className="text-sm text-gray-400 mt-2">
+        {error?.response?.data?.message || "Please try again"}
+      </p>
+    </div>
+  );
+}
   return bookings.length > 0 ? (
     <div className="relative my-40 mb-60 px-6 md:px-16 lg:px-40 xl:px-44 overflow-hidden min-h-[80vh]">
       {/* Background blur */}
@@ -117,11 +132,12 @@ const MyBookings = () => {
                   {/* ✅ PENDING */}
                   {!item.isPaid && !isExpired && (
                     <button
-                      onClick={() =>
-                        navigate(`/payment/${item.showId}`, {
-                          state: { bookingId: item.id },
-                        })
-                      }
+                    onClick={() => {
+setPayingId(item.id);
+navigate(`/payment/${item.showId}`, {
+state: { bookingId: item.id },
+});
+}}
                       className="mt-3 px-6 py-2 rounded-full 
                                  bg-gradient-to-r from-pink-500 to-red-500 
                                  hover:from-pink-600 hover:to-red-600 

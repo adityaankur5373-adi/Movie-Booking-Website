@@ -163,6 +163,7 @@ for (const seat of seats) {
     amount,
     seats,
     ttlSeconds,
+    showId: booking.show.id,
   });
 });
 export const cancelPayment = asyncHandler(async (req, res) => {
