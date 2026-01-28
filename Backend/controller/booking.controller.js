@@ -222,7 +222,6 @@ export const createBooking = asyncHandler(async (req, res) => {
     include: {
       screen: true,
     },
-     seatPrice:true,
   });
 
   if (!show) throw new AppError("Show not found", 404);
