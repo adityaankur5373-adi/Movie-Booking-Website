@@ -18,7 +18,7 @@ const Payment = () => {
 
   const bookingId = location.state?.bookingId || null;
 
-  const [showId, setShowId] = useState(null); // ✅ SINGLE SOURCE
+  const [showId, setShowId] = useState(null); // backend source of truth
   const [clientSecret, setClientSecret] = useState("");
   const [amount, setAmount] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -29,7 +29,7 @@ const Payment = () => {
   const confirmedRef = useRef(false);
   const expiredRef = useRef(false);
 
-  // ❌ Invalid access guard
+  // ✅ Invalid access guard (DO NOT use showId here)
   useEffect(() => {
     if (!bookingId) {
       toast.error("Invalid booking");
@@ -61,7 +61,7 @@ const Payment = () => {
     createIntent();
   }, [bookingId, navigate]);
 
-  // ⏱ Countdown
+  // ⏱ Countdown (state only, no side-effects)
   useEffect(() => {
     if (!timeLeft) return;
 
@@ -72,7 +72,7 @@ const Payment = () => {
     return () => clearInterval(interval);
   }, [timeLeft]);
 
-  // ⏱ Handle expiry
+  // ⏱ Handle expiry safely
   useEffect(() => {
     if (timeLeft > 0 || expiredRef.current || !showId) return;
 
@@ -125,11 +125,15 @@ const Payment = () => {
     }
   };
 
-  // ❌ Cancel Payment
+  // ❌ Cancel Payment (guard added)
   const handleCancelPayment = async () => {
-    if (!showId) return;
+    if (!showId) {
+      navigate("/my-bookings", { replace: true });
+      return;
+    }
 
     toast("Payment cancelled");
+
     navigate(`/shows/${showId}/seats`, {
       replace: true,
       state: { expired: true },
@@ -166,25 +170,35 @@ const Payment = () => {
             onClick={handlePayNow}
             className="mt-6 w-full bg-red-600 text-white py-3 rounded-xl"
           >
-            {loading ? "Processing…" : `Pay ₹${amount}`}
+            {loading ? "Processing…" : `Pay ₹${amount || "—"}`}
           </button>
 
-          <button
-            onClick={handleCancelPayment}
-            className="mt-4 text-sm text-red-600"
-          >
-            Cancel Payment
-          </button>
+          <div className="mt-4 flex justify-between text-sm">
+            <button
+              onClick={() => navigate("/my-bookings")}
+              className="flex items-center gap-1 text-gray-600"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+
+            <button
+              onClick={handleCancelPayment}
+              className="text-red-600 hover:underline"
+            >
+              Cancel Payment
+            </button>
+          </div>
         </div>
 
         {/* SUMMARY */}
-        <div className="bg-white rounded-2xl shadow p-6">
+        <div className="bg-white rounded-2xl shadow p-6 h-fit">
           <p className="font-medium">Seats</p>
-          <p>{seats.join(", ")}</p>
+          <p>{seats.length ? seats.join(", ") : "—"}</p>
 
           <div className="mt-4 flex justify-between">
             <span>Total</span>
-            <span>₹{amount}</span>
+            <span>₹{amount || "—"}</span>
           </div>
 
           <div className="mt-4 flex justify-between text-red-600">
