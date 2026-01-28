@@ -17,17 +17,17 @@ const Payment = () => {
   const elements = useElements();
 
   const bookingId = location.state?.bookingId || null;
-  const seats = location.state?.seats || [];
 
   const [clientSecret, setClientSecret] = useState("");
   const [amount, setAmount] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [seats, setSeats] = useState([]); // ✅ REQUIRED
   const [loading, setLoading] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
 
   const confirmedRef = useRef(false);
 
-  // ❌ Invalid access
+  // ❌ Invalid access guard
   useEffect(() => {
     if (!bookingId) {
       toast.error("Invalid booking");
@@ -46,6 +46,7 @@ const Payment = () => {
         setClientSecret(data.clientSecret);
         setAmount(data.amount);
         setTimeLeft(data.ttlSeconds * 1000);
+        setSeats(data.seats || []); // ✅ FIX
       } catch (err) {
         toast.error(err?.response?.data?.message || "Payment expired");
         navigate(`/shows/${showId}/seats`, { replace: true });
@@ -55,7 +56,7 @@ const Payment = () => {
     if (bookingId) createIntent();
   }, [bookingId, navigate, showId]);
 
-  // ⏱ Countdown (UI only)
+  // ⏱ Countdown
   useEffect(() => {
     if (!timeLeft) return;
 
@@ -79,7 +80,10 @@ const Payment = () => {
 
   // 💳 Pay Now
   const handlePayNow = async () => {
-    if (!stripe || !elements || timeLeft <= 0) return;
+    if (!stripe || !elements || !clientSecret || timeLeft <= 0) {
+      toast.error("Payment is not ready yet");
+      return;
+    }
 
     try {
       setLoading(true);
@@ -105,7 +109,7 @@ const Payment = () => {
     }
   };
 
-  // ❌ CANCEL PAYMENT (HARD FLOW)
+  // ❌ Cancel Payment
   const handleCancelPayment = async () => {
     try {
       await api.post("/payments/cancel", { bookingId });
@@ -118,101 +122,94 @@ const Payment = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] pt-24 pb-20">
-      <div className="max-w-6xl mx-auto px-4">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">
-          Complete Payment
-        </h1>
+    <div className="min-h-screen bg-gray-100 flex justify-center px-4 py-10">
+      <div className="w-full max-w-4xl grid lg:grid-cols-3 gap-6">
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* LEFT */}
-          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border p-6">
-            <p className="text-sm font-medium text-gray-600 mb-3">
-              Card Details
+        {/* PAYMENT */}
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow p-6">
+          <h1 className="text-xl font-semibold text-gray-900 mb-1">
+            Secure Payment
+          </h1>
+          <p className="text-sm text-gray-500 mb-6">
+            Enter your card details to complete booking
+          </p>
+
+          <div className="border rounded-xl p-4 bg-gray-50">
+            <CardElement />
+          </div>
+
+          {paymentFailed && (
+            <p className="text-sm text-red-600 mt-3">
+              Payment failed. Please try again.
             </p>
+          )}
 
-            <div className="border rounded-xl p-4">
-              <CardElement />
+          <button
+            disabled={loading || !clientSecret || timeLeft <= 0}
+            onClick={handlePayNow}
+            className="mt-6 w-full bg-red-600 hover:bg-red-700 
+                       text-white py-3 rounded-xl font-semibold
+                       disabled:opacity-50 transition"
+          >
+            {loading ? "Processing…" : `Pay ₹${amount}`}
+          </button>
+
+          <div className="mt-4 flex justify-between text-sm">
+            <button
+              onClick={() => navigate("/my-bookings")}
+              className="flex items-center gap-1 text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+
+            <button
+              onClick={handleCancelPayment}
+              className="text-red-600 hover:underline"
+            >
+              Cancel Payment
+            </button>
+          </div>
+        </div>
+
+        {/* ORDER SUMMARY */}
+        <div className="bg-white rounded-2xl shadow p-6 h-fit">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Order Summary
+          </h2>
+
+          <div className="space-y-3 text-sm text-gray-700">
+            <div>
+              <p className="font-medium text-gray-900">Seats</p>
+              <p className="mt-1">
+                {seats.length ? seats.join(", ") : "—"}
+              </p>
             </div>
 
-            {paymentFailed && (
-              <p className="text-red-500 text-sm mt-3">
-                Payment failed. Please try again.
-              </p>
-            )}
-
-            <div className="mt-6 flex items-center gap-6">
-              <button
-                disabled={loading || !clientSecret || timeLeft <= 0}
-                onClick={handlePayNow}
-                className="bg-red-600 hover:bg-red-700 transition 
-                           text-white px-6 py-3 rounded-xl font-medium 
-                           disabled:opacity-50"
-              >
-                {loading ? "Processing..." : `Pay ₹${amount}`}
-              </button>
-
-              {/* ✅ BACK FLOW (NO SIDE EFFECTS) */}
-              <button
-                onClick={() => navigate("/my-bookings")}
-                className="flex items-center gap-1 text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-
-              {/* ❌ CANCEL FLOW (FINAL) */}
-              <button
-                onClick={handleCancelPayment}
-                className="text-sm text-red-600 hover:underline"
-              >
-                Cancel Payment
-              </button>
+            <div className="flex justify-between items-center border-t pt-3">
+              <span className="font-medium text-gray-900">Total</span>
+              <span className="text-xl font-bold">₹{amount}</span>
             </div>
           </div>
 
-          {/* RIGHT */}
-   {/* RIGHT */}
-<div className="bg-white rounded-2xl shadow-md border border-gray-200 p-6">
-  <h2 className="text-lg font-semibold text-gray-900 mb-4">
-    Order Summary
-  </h2>
+          <div className="mt-6 flex items-center justify-between 
+                          bg-red-50 border border-red-200 
+                          text-red-700 px-4 py-3 rounded-xl">
+            <div className="flex items-center gap-2">
+              <Clock3 className="w-4 h-4" />
+              <span className="text-sm font-medium">Time left</span>
+            </div>
 
-  <div className="space-y-2">
-    <p className="text-sm text-gray-700">
-      <span className="font-medium text-gray-900">Seats:</span>{" "}
-      {data.seats.join(", ")}
-    </p>
+            <span className="font-semibold tracking-wide">
+              {String(minutes).padStart(2, "0")}:
+              {String(seconds).padStart(2, "0")}
+            </span>
+          </div>
 
-    <p className="text-2xl font-bold text-gray-900">
-      ₹{amount}
-    </p>
-  </div>
-
-  {/* TIMER */}
-  <div
-    className="mt-6 flex items-center justify-between 
-               bg-red-100 border border-red-200 
-               text-red-700 px-4 py-3 rounded-xl"
-  >
-    <div className="flex items-center gap-2">
-      <Clock3 className="w-4 h-4" />
-      <span className="text-sm font-medium">
-        Time remaining
-      </span>
-    </div>
-
-    <span className="font-semibold tracking-wide">
-      {String(minutes).padStart(2, "0")}:
-      {String(seconds).padStart(2, "0")}
-    </span>
-  </div>
-
-  <p className="mt-4 text-xs text-gray-600 leading-relaxed">
-    Seats are reserved temporarily. Please complete the payment
-    before the timer expires to confirm your booking.
-  </p>
-</div>
+          <p className="mt-4 text-xs text-gray-500">
+            Seats are temporarily reserved. Complete payment before
+            the timer expires to confirm booking.
+          </p>
         </div>
       </div>
     </div>
