@@ -90,6 +90,7 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     select: {
       id: true,
       startTime: true,
+      movie:true,
       screen: {
         select: {
           id: true,
