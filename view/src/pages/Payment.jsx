@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import api from "../api/api";
 import { useQueryClient } from "@tanstack/react-query";
-
+import Loading from "../components/Loading";
 // Stripe
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { Clock3, ArrowLeft } from "lucide-react";
@@ -145,8 +145,13 @@ const Payment = () => {
       queryClient.invalidateQueries({ queryKey: ["myBookings"] });
     }
   };
-
+    if (!clientSecret) {
   return (
+    <Loading/>
+  );
+}
+  return (
+  
     <div className="min-h-screen bg-gray-100 flex justify-center px-4 py-10">
       <div className="w-full max-w-4xl grid lg:grid-cols-3 gap-6">
         {/* PAYMENT */}
