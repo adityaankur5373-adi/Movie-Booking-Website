@@ -8,7 +8,7 @@ import Loading from "../components/Loading";
 import api from "../api/api";
 import { useQuery } from "@tanstack/react-query";
 
-const isPastShow = (iso) => new Date(iso).getTime() < Date.now();
+// ❌ REMOVED isPastShow — backend decides booking validity
 
 const fetchTheatre = async (theatreId) => {
   const { data } = await api.get(`/theatres/${theatreId}`);
@@ -38,7 +38,7 @@ const TheatreDetails = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // ✅ shows running in this theatre (today only)
+  // ✅ shows running in this theatre (today)
   const {
     data: theatreShows = [],
     isLoading: showsLoading,
@@ -50,20 +50,20 @@ const TheatreDetails = () => {
     staleTime: 30 * 1000,
   });
 
-  // ✅ Group shows by movieId (same as your old logic)
+  // ✅ Group shows by movieId (FIXED)
   const moviesWithShows = useMemo(() => {
     const grouped = theatreShows.reduce((acc, show) => {
       const movieId = show?.movie?.id;
       if (!movieId) return acc;
 
       if (!acc[movieId]) acc[movieId] = [];
+
       acc[movieId].push({
-        movieId,
         showId: show.id,
         screenId: show.screen?.id,
         screenName: show.screen?.name,
         time: show.startTime,
-        isPast: isPastShow(show.startTime),
+        isBookable: show.isBookable, // ✅ backend truth
       });
 
       return acc;
@@ -71,15 +71,17 @@ const TheatreDetails = () => {
 
     return Object.keys(grouped).map((movieId) => ({
       movie: theatreShows.find((s) => s?.movie?.id === movieId)?.movie,
-      shows: grouped[movieId].sort((a, b) => new Date(a.time) - new Date(b.time)),
+      shows: grouped[movieId].sort(
+        (a, b) => new Date(a.time) - new Date(b.time)
+      ),
     }));
   }, [theatreShows]);
 
-  const handleSelectShow = (showId, time) => {
+  const handleSelectShow = (showId, isBookable) => {
     if (!showId) return toast.error("Show not found");
 
-    if (isPastShow(time)) {
-      return toast.error("This showtime has already passed");
+    if (!isBookable) {
+      return toast.error("Booking for this show is closed");
     }
 
     navigate(`/shows/${showId}/seats`);
@@ -141,7 +143,9 @@ const TheatreDetails = () => {
                 key={idx}
                 movie={item.movie}
                 shows={item.shows}
-                onSelectShow={(showId, time) => handleSelectShow(showId, time)}
+                onSelectShow={(showId, _time, isBookable) =>
+                  handleSelectShow(showId, isBookable)
+                }
               />
             );
           })}
@@ -150,4 +154,5 @@ const TheatreDetails = () => {
     </div>
   );
 };
+
 export default TheatreDetails;
