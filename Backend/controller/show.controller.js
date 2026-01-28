@@ -331,6 +331,8 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
   if (!theatreId) throw new AppError("theatreId is required", 400);
 
+  const version = await getShowsCacheVersion();
+
   // ✅ single `now`
   const now = new Date();
 
@@ -403,6 +405,12 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   }));
 
   // ✅ cache the FINAL response
+  await redis.set(
+    cacheKey,
+    JSON.stringify(showsWithStatus),
+    "EX",
+    10
+  );
 
   return res.json({
     success: true,
