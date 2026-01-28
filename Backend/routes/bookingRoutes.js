@@ -3,7 +3,6 @@ import protect from "../middlewares/protect.js";
 import adminOnly from "../middlewares/adminOnly.js";
 
 import {
-  confirmBooking,
   getMyBookings,
   getAllBookings,
   getBookingById,
@@ -20,7 +19,6 @@ const router = express.Router();
 /* ------------------- BOOKINGS ------------------- */
 
 // confirm booking after payment success
-router.post("/confirm", protect, confirmBooking);
 router.post("/create", protect, createBooking);
 // my bookings
 router.get("/me", protect, getMyBookings);

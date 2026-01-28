@@ -485,6 +485,8 @@ export const getAllmovies = asyncHandler(async (req, res) => {
     id: true,
     title: true,
     posterPath: true,
+     voteAverage:true,
+     voteCount:true,
     createdAt: true,
   },
   orderBy: { createdAt: "desc" },

@@ -64,13 +64,29 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
 
   const cached = await redis.get(cacheKey);
   if (cached) {
+    let shows = JSON.parse(cached);
+
+    // 🔥 FILTER ON READ (important)
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (date === todayStr) {
+      const bufferMinutes = 10;
+      const nowPlusBuffer = new Date(
+        Date.now() + bufferMinutes * 60 * 1000
+      );
+
+      shows = shows.filter(
+        (s) => new Date(s.startTime) >= nowPlusBuffer
+      );
+    }
+
     return res.json({
       success: true,
       source: "cache",
-      shows: JSON.parse(cached),
+      shows,
     });
   }
 
+  // 🧠 DB query (unchanged logic)
   const todayStr = new Date().toISOString().slice(0, 10);
   const isToday = date === todayStr;
 
@@ -88,7 +104,6 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     select: {
       id: true,
       startTime: true,
-      seatPrice: true,
       screen: {
         select: {
           id: true,
@@ -97,7 +112,7 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
             select: {
               id: true,
               name: true,
-              area:true,
+              area: true,
               city: true,
               address: true,
             },
@@ -139,13 +154,10 @@ export const getShowById = asyncHandler(async (req, res) => {
         id: true,
         startTime: true,
         seatPrice: true,
-        seatPrices: true,
         movie: {
           select: {
             id: true,
             title: true,
-            posterPath: true,
-            runtime: true,
           },
         },
         screen: {
@@ -172,7 +184,6 @@ export const getShowById = asyncHandler(async (req, res) => {
       id: show.id,
       startTime: show.startTime,
       seatPrice: show.seatPrice,
-      seatPrices: show.seatPrices,
       movie: show.movie,
       theatre: show.screen.theatre,
       screen: show.screen,
@@ -209,7 +220,7 @@ export const getShowById = asyncHandler(async (req, res) => {
 // POST /api/shows
 // =====================================
 export const createShow = asyncHandler(async (req, res) => {
-  const { movieId, screenId, startTime, seatPrice, seatPrices } = req.body;
+  const { movieId, screenId, startTime, seatPrice } = req.body;
 
   if (!movieId || !screenId || !startTime || seatPrice === undefined) {
     throw new AppError(
@@ -218,35 +229,68 @@ export const createShow = asyncHandler(async (req, res) => {
     );
   }
 
+  // 1️⃣ Validate screen
   const screen = await prisma.screen.findUnique({
     where: { id: screenId },
     select: { id: true },
   });
 
-  if (!screen) throw new AppError("Screen not found", 404);
+  if (!screen) {
+    throw new AppError("Screen not found", 404);
+  }
 
+  // 2️⃣ Fetch movie runtime
+  const movie = await prisma.movie.findUnique({
+    where: { id: movieId },
+    select: { runtime: true },
+  });
+
+  if (!movie || !movie.runtime) {
+    throw new AppError("Movie runtime not found", 400);
+  }
+
+  // 3️⃣ Calculate startTime & endTime
+  const start = new Date(startTime);
+
+  if (isNaN(start.getTime())) {
+    throw new AppError("Invalid startTime", 400);
+  }
+
+  const endTime = new Date(
+    start.getTime() + movie.runtime * 60 * 1000
+  );
+
+  // (Optional) add cleaning / buffer time
+  // endTime.setMinutes(endTime.getMinutes() + 15);
+
+  // 4️⃣ Create show with endTime
   const show = await prisma.show.create({
     data: {
       movieId,
       screenId,
-      startTime: new Date(startTime),
+      startTime: start,
+      endTime, // ✅ REQUIRED now
       seatPrice,
-      seatPrices,
     },
   });
 
+  // 5️⃣ Invalidate show caches
   await bumpShowsCacheVersion();
 
-  res.status(201).json({ success: true, show });
+  res.status(201).json({
+    success: true,
+    show,
+  });
 });
-
 // =====================================
 // GET /api/shows/movie/:movieId
 // =====================================
 export const getShowsByMovie = asyncHandler(async (req, res) => {
   const { movieId } = req.params;
-
   if (!movieId) throw new AppError("movieId is required", 400);
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
 
   const version = await getShowsCacheVersion();
   const cacheKey = showsByMovieKey(version, movieId);
@@ -263,7 +307,7 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
   const shows = await prisma.show.findMany({
     where: {
       movieId,
-      startTime: { gte: new Date() },
+      startTime: { gte: startOfToday },
     },
     select: {
       id: true,
@@ -273,13 +317,6 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
         select: {
           id: true,
           name: true,
-          theatre: {
-            select: {
-              id: true,
-              name: true,
-              city: true,
-            },
-          },
         },
       },
     },
@@ -290,40 +327,52 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
 
   res.json({ success: true, source: "db", shows });
 });
-
 // =====================================
 // GET /api/shows/theatre/:theatreId
-// =====================================
 export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
   if (!theatreId) throw new AppError("theatreId is required", 400);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-
   const version = await getShowsCacheVersion();
+  const todayStr = new Date().toISOString().slice(0, 10);
   const cacheKey = showsByTheatreKey(version, theatreId, todayStr);
 
   const cached = await redis.get(cacheKey);
   if (cached) {
+    let shows = JSON.parse(cached);
+
+    // 🔥 FILTER ON READ (important)
+    const bufferMinutes = 10;
+    const nowPlusBuffer = new Date(
+      Date.now() + bufferMinutes * 60 * 1000
+    );
+
+    shows = shows.filter(
+      (s) => new Date(s.startTime) >= nowPlusBuffer
+    );
+
     return res.json({
       success: true,
       source: "cache",
-      shows: JSON.parse(cached),
+      shows,
     });
   }
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  const bufferMinutes = 10;
+  const nowPlusBuffer = new Date(
+    Date.now() + bufferMinutes * 60 * 1000
+  );
 
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
 
   const shows = await prisma.show.findMany({
     where: {
-      screen: {
-        is: { theatreId },
+      screen: { is: { theatreId } },
+      startTime: {
+        gte: nowPlusBuffer, // ✅ buffer applied
+        lte: endOfDay,
       },
-      startTime: { gte: startOfDay, lte: endOfDay },
     },
     select: {
       id: true,
@@ -335,10 +384,10 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
           title: true,
           posterPath: true,
           genres: { select: { id: true, name: true } },
-          voteAverage : true,
-          voteCount:true,
-           releaseDate:true,
-            runtime : true,
+          voteAverage: true,
+          voteCount: true,
+          releaseDate: true,
+          runtime: true,
         },
       },
       screen: {
@@ -352,111 +401,9 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  await redis.set(cacheKey, JSON.stringify(shows), "EX", 30);
+  await redis.set(cacheKey, JSON.stringify(shows), "EX", 10);
 
   res.json({ success: true, source: "db", shows });
-});
-
-// =====================================
-// GET /api/shows/all  (ADMIN)
-// =====================================
-export const getAllShowsAdmin = asyncHandler(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-  const cursor = req.query.cursor || null;
-
-  const version = await getShowsCacheVersion();
-  const cacheKey = adminShowsKey(version, limit, cursor);
-
-  const cached = await redis.get(cacheKey);
-  if (cached) {
-    return res.json({
-      success: true,
-      source: "cache",
-      ...JSON.parse(cached),
-    });
-  }
-
-  const shows = await prisma.show.findMany({
-    take: limit + 1,
-    ...(cursor && {
-      skip: 1,
-      cursor: { id: cursor },
-    }),
-    select: {
-      id: true,
-      startTime: true,
-      seatPrice: true,
-      movie: {
-        select: {
-          id: true,
-          title: true,
-        },
-      },
-      screen: {
-        select: {
-          id: true,
-          name: true,
-          theatre: {
-            select: {
-              id: true,
-              name: true,
-              city: true,
-            },
-          },
-        },
-      },
-      _count: {
-        select: { bookings: true },
-      },
-    },
-    orderBy: [{ startTime: "desc" }, { id: "desc" }],
-  });
-
-  const hasNextPage = shows.length > limit;
-  const data = hasNextPage ? shows.slice(0, limit) : shows;
-
-  // optional: earnings calculation using aggregate (faster than loading bookings)
-  const showIds = data.map((s) => s.id);
-
-  const earningsAgg = await prisma.booking.groupBy({
-    by: ["showId"],
-    where: {
-      showId: { in: showIds },
-      status: "CONFIRMED",
-    },
-    _sum: {
-      totalAmount: true,
-    },
-  });
-
-  const earningsMap = new Map(
-    earningsAgg.map((x) => [x.showId, x._sum.totalAmount || 0])
-  );
-
-  const formatted = data.map((s) => ({
-    id: s.id,
-    startTime: s.startTime,
-    seatPrice: s.seatPrice,
-    movie: s.movie,
-    screen: s.screen,
-    theatre: s.screen?.theatre,
-    totalBookings: s._count.bookings,
-    earnings: earningsMap.get(s.id) || 0,
-  }));
-
-  const responseData = {
-    shows: formatted,
-    nextCursor: hasNextPage ? data[data.length - 1].id : null,
-    hasNextPage,
-  };
-
-  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 20);
-
-  res.json({
-    success: true,
-    source: "db",
-    ...responseData,
-  });
 });
 
 // =====================================
@@ -511,7 +458,6 @@ export const lockSeats = asyncHandler(async (req, res) => {
     success: true,
     message: "Seats locked successfully",
     seats,
-    ttlSeconds: LOCK_TTL_SECONDS,
     ttlRemaining,
   });
 });
@@ -549,5 +495,156 @@ export const unlockSeats = asyncHandler(async (req, res) => {
     success: true,
     message: "Seats unlocked",
     seats,
+  });
+});
+const getShowStatus = (now, startTime, endTime) => {
+  if (now < startTime) return "UPCOMING";
+  if (now >= startTime && now <= endTime) return "RUNNING";
+  return "ENDED";
+};
+
+const getTotalSeatsFromLayout = (layout) => {
+  if (!layout?.rows) return 0;
+  return layout.rows.reduce((sum, row) => sum + row.seats.length, 0);
+};
+export const getAllShowsAdmin = asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const cursor = req.query.cursor || null;
+
+  const version = await getShowsCacheVersion();
+  const cacheKey = adminShowsKey(version, limit, cursor);
+
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      source: "cache",
+      ...JSON.parse(cached),
+    });
+  }
+
+  const now = new Date();
+
+  const shows = await prisma.show.findMany({
+    take: limit + 1,
+    ...(cursor && {
+      skip: 1,
+      cursor: { id: cursor },
+    }),
+    select: {
+      id: true,
+      startTime: true,
+      seatPrice: true,
+      movie: {
+        select: {
+          id: true,
+          title: true,
+          runtime: true,
+        },
+      },
+      screen: {
+        select: {
+          id: true,
+          name: true,
+          layout: true,
+          theatre: {
+            select: {
+              id: true,
+              name: true,
+              city: true,
+              area: true,
+            },
+          },
+        },
+      },
+      _count: {
+        select: { bookings: true },
+      },
+    },
+    orderBy: [{ startTime: "desc" }, { id: "desc" }],
+  });
+
+  const hasNextPage = shows.length > limit;
+  const data = hasNextPage ? shows.slice(0, limit) : shows;
+
+  const showIds = data.map((s) => s.id);
+
+  // 🔥 Earnings aggregation
+  const earningsAgg = await prisma.booking.groupBy({
+    by: ["showId"],
+    where: {
+      showId: { in: showIds },
+      status: "CONFIRMED",
+    },
+    _sum: {
+      totalAmount: true,
+    },
+    _count: {
+      id: true,
+    },
+  });
+
+  const earningsMap = new Map(
+    earningsAgg.map((x) => [
+      x.showId,
+      {
+        earnings: x._sum.totalAmount || 0,
+        ticketsSold: x._count.id,
+      },
+    ])
+  );
+
+  const formatted = data.map((s) => {
+    const runtime = s.movie?.runtime || 0;
+    const endTime = new Date(
+      s.startTime.getTime() + runtime * 60 * 1000
+    );
+
+    const totalSeats = getTotalSeatsFromLayout(s.screen?.layout);
+    const sold = earningsMap.get(s.id)?.ticketsSold || 0;
+
+    return {
+      id: s.id,
+      startTime: s.startTime,
+      endTime,
+      status: getShowStatus(now, s.startTime, endTime),
+
+      seatPrice: s.seatPrice,
+
+      movie: s.movie,
+
+      theatre: s.screen?.theatre,
+      screen: {
+        id: s.screen.id,
+        name: s.screen.name,
+      },
+
+      stats: {
+        totalSeats,
+        ticketsSold: sold,
+        availableSeats: Math.max(totalSeats - sold, 0),
+      },
+
+      earnings: {
+        amount: earningsMap.get(s.id)?.earnings || 0,
+        currency: "INR",
+      },
+
+      canEdit: now < s.startTime,
+    };
+  });
+
+  const responseData = {
+    shows: formatted,
+    nextCursor: hasNextPage ? data[data.length - 1].id : null,
+    hasNextPage,
+  };
+
+  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 20);
+
+  res.json({
+    success: true,
+    source: "db",
+    ...responseData,
   });
 });

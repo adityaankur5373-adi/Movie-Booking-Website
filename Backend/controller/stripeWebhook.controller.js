@@ -19,14 +19,15 @@ const stripeWebhook = async (req, res) => {
   }
 
   try {
-    if (event.type === "payment_intent.succeeded") {
-      const pi = event.data.object;
+   if (event.type === "payment_intent.succeeded") {
+  const pi = event.data.object;
 
-      await confirmBookingFromWebhook({
-        bookingId: pi.metadata.bookingId,
-        paymentIntentId: pi.id,
-      });
-    }
+  await confirmBookingFromWebhook({
+    bookingId: pi.metadata.bookingId,
+    paymentIntentId: pi.id,
+    amountReceived: pi.amount_received,
+  });
+}
 
     return res.status(200).send("ok");
   } catch (err) {

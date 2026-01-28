@@ -88,6 +88,7 @@ model Screen {
 model Show {
   id         String    @id @default(uuid())
   startTime  DateTime
+  endTime DateTime
   seatPrice  Int
   movieId    String
   screenId   String
@@ -105,7 +106,7 @@ model Booking {
   id           String   @id @default(uuid())
   userId       String
   showId       String
-  paymentIntentId String?
+  paymentIntentId String? @unique
   bookedSeats  String[]
   status BookingStatus @default(PENDING)
   totalAmount  Int

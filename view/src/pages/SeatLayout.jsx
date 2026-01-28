@@ -53,7 +53,6 @@ const SeatLayout = () => {
   const refreshShow = async () => {
     try {
       const { data } = await api.get(`/shows/${showId}`);
-      console.log(data)
       if (data?.success) setShow(data.show);
     } catch (err) {
       console.log("refresh error:", err?.response?.data || err.message);
@@ -191,55 +190,39 @@ const SeatLayout = () => {
   return total;
 }, [layout, selectedSeats]);
   // ✅ LOCK + go to payment page
-  const handleProceed = async () => {
-  if (!user) {
-    toast.error("Please login/signup to continue");
-    return;
-  }
-
-  if (selectedSeats.length === 0) {
-    return toast("Select at least 1 seat");
-  }
-
-  if (proceedLoading) return; // ✅ stop double click
+     const handleProceed = async () => {
+  if (!user) return toast.error("Please login");
+  if (selectedSeats.length === 0) return toast("Select at least 1 seat");
+  if (proceedLoading) return;
 
   try {
     setProceedLoading(true);
 
-    const res = await api.post(`/shows/${showId}/lock`, {
+    // 1️⃣ Lock seats (Redis)
+    await api.post(`/shows/${showId}/lock`, {
       seats: selectedSeats,
     });
+
+    // 2️⃣ Create booking (DB)
     const bookingRes = await api.post("/bookings/create", {
-showId,
-seats: selectedSeats,
-});
-
-   proceedingRef.current = true;
-const bookingId = bookingRes.data.booking.id;
-
-    localStorage.setItem(
-      `payment_${showId}`,
-      JSON.stringify({
-        seats: selectedSeats,
-        createdAt: Date.now(),
-        bookingId: bookingId,
-        ttlRemaining: res.data.ttlRemaining,
-      })
-    );
-
-    navigate(`/payment/${showId}`, {
-      state: { seats: selectedSeats,bookingId },
+      showId,
+      seats: selectedSeats,
     });
+
+    const bookingId = bookingRes.data.booking.id;
+
+    // 3️⃣ Go to payment with ONLY bookingId
+    navigate(`/payment/${showId}`, {
+      state: { bookingId },
+    });
+
     setSelectedSeats([]);
   } catch (err) {
-    console.log("Lock error:", err?.response?.data || err.message);
-    toast.error(err?.response?.data?.message || "Failed to lock seats");
+    toast.error(err?.response?.data?.message || "Failed to proceed");
   } finally {
     setProceedLoading(false);
   }
 };
-
-  // ✅ AUTO UNLOCK on leaving SeatLayout (if user didn't proceed)
  
   if (loading) return <Loading />;
   if (!show || !layout) return <Loading />;

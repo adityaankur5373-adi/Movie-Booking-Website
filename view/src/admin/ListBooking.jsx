@@ -60,12 +60,15 @@ const ListBooking = () => {
     <>
       <Title text1="List" text2="Booking" />
 
-      <div className="max-w-4xl mt-6 overflow-x-auto">
+      <div className="max-w-6xl mt-6 overflow-x-auto">
         <table className="w-full border-collapse rounded-md overflow-hidden text-nowrap">
           <thead>
             <tr className="bg-primary/20 text-left text-white">
-              <th className="p-2 font-medium">User Name</th>
-              <th className="p-2 font-medium">Movie Name</th>
+              <th className="p-2 font-medium">User</th>
+              <th className="p-2 font-medium">Movie</th>
+              <th className="p-2 font-medium">City</th>
+              <th className="p-2 font-medium">Theatre</th>
+              <th className="p-2 font-medium">Screen</th>
               <th className="p-2 font-medium">Show Time</th>
               <th className="p-2 font-medium">Seats</th>
               <th className="p-2 font-medium">Amount</th>
@@ -78,20 +81,47 @@ const ListBooking = () => {
                 key={item.id || index}
                 className="border-b border-primary/20 bg-primary/5 even:bg-primary/10"
               >
-                <td className="p-2 min-w-45 pl-5">
+                {/* User */}
+                <td className="p-2 pl-5">
                   {item?.user?.name || item?.user?.email || "User"}
                 </td>
 
-                <td className="p-2">{item?.show?.movie?.title || "Movie"}</td>
+                {/* Movie */}
+                <td className="p-2">
+                  {item?.show?.movie?.title || "Movie"}
+                </td>
 
-                <td className="p-2">{dateFormat(item?.show?.startTime)}</td>
+                {/* City */}
+                <td className="p-2">
+                  {item?.show?.screen?.theatre?.city || "—"}
+                </td>
 
+                {/* Theatre */}
+                <td className="p-2">
+                  {item?.show?.screen?.theatre?.name || "—"}
+                </td>
+
+                {/* Screen */}
+                <td className="p-2">
+                  {item?.show?.screen?.name}
+                  {item?.show?.screen?.screenNo
+                    ? ` (Screen ${item.show.screen.screenNo})`
+                    : ""}
+                </td>
+
+                {/* Show Time */}
+                <td className="p-2">
+                  {dateFormat(item?.show?.startTime)}
+                </td>
+
+                {/* Seats */}
                 <td className="p-2">
                   {item?.bookedSeats?.length > 0
                     ? item.bookedSeats.join(", ")
                     : "None"}
                 </td>
 
+                {/* Amount */}
                 <td className="p-2">
                   {currency} {item?.totalAmount ?? 0}
                 </td>
@@ -116,7 +146,9 @@ const ListBooking = () => {
                 {isFetchingNextPage ? "Loading..." : "Load More"}
               </button>
             ) : (
-              <p className="text-sm text-gray-400 mt-3">No more bookings</p>
+              <p className="text-sm text-gray-400 mt-3">
+                No more bookings
+              </p>
             )}
           </div>
         )}

@@ -7,12 +7,12 @@ import { calcTotalFromLayout } from "../utils/calcTotal.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-const LOCK_TTL_SECONDS = 300;
-const lockKey = (showId) => `lock:show:${showId}`;
-  export const createPaymentIntent = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
 
-  const { bookingId, skipLock } = req.body; // ✅ updated
+const lockKey = (showId) => `lock:show:${showId}`;
+
+export const createPaymentIntent = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { bookingId } = req.body;
 
   if (!bookingId) throw new AppError("bookingId is required", 400);
 
@@ -20,10 +20,7 @@ const lockKey = (showId) => `lock:show:${showId}`;
     where: { id: bookingId },
     include: {
       show: {
-        include: {
-          screen: true,
-          movie: true,
-        },
+        include: { screen: true },
       },
     },
   });
@@ -31,54 +28,127 @@ const lockKey = (showId) => `lock:show:${showId}`;
   if (!booking) throw new AppError("Booking not found", 404);
   if (booking.userId !== userId) throw new AppError("Not allowed", 403);
 
+  // ✅ Already paid → short-circuit
   if (booking.isPaid) {
-    return res.status(200).json({
+    return res.json({
       success: true,
-      message: "Booking already paid",
       clientSecret: null,
       amount: booking.totalAmount,
-      ttlSeconds: LOCK_TTL_SECONDS,
     });
   }
 
-  const showId = booking.showId;
+  if (!booking.show?.screen?.layout) {
+    throw new AppError("Seat layout missing", 500);
+  }
+
   const seats = booking.bookedSeats;
+  const redisKey = lockKey(booking.showId);
 
-  if (!showId) throw new AppError("showId missing in booking", 400);
-  if (!seats || seats.length === 0) throw new AppError("No seats in booking", 400);
-
-  // ✅ only check lock when skipLock is false
-  if (!skipLock) {
-    const key = lockKey(showId);
-
-    for (const seat of seats) {
-      const lockedBy = await redis.hget(key, seat);
-      if (lockedBy !== userId) {
-        throw new AppError(`Seat ${seat} is not locked by you`, 409);
-      }
+  // 🔒 Enforce seat lock ownership
+  for (const seat of seats) {
+    const lockedBy = await redis.hget(redisKey, seat);
+    if (lockedBy !== userId) {
+      throw new AppError(`Seat ${seat} is not locked by you`, 409);
     }
   }
 
-  const amount = calcTotalFromLayout(booking.show.screen.layout, seats);
+  // 🔁 REFRESH LOCK TTL (important)
+ 
+ const ttlSeconds = await redis.ttl(redisKey);
+  // 💰 Calculate amount server-side
+  const amount = calcTotalFromLayout(
+    booking.show.screen.layout,
+    seats,
+    booking.show.seatPrice
+  );
 
   if (amount <= 0) throw new AppError("Invalid amount", 400);
 
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: amount * 100,
-    currency: "inr",
-    metadata: {
-      userId,
-      showId,
-      bookingId,
-      seats: JSON.stringify(seats),
-      movieTitle: booking.show.movie?.title || "",
-    },
-  });
+  // 💾 Persist amount safely
+  if (!booking.isPaid && booking.totalAmount !== amount) {
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { totalAmount: amount },
+    });
+  }
+
+  let paymentIntent = null;
+
+  // ================================
+  // ♻️ Reuse existing PaymentIntent
+  // ================================
+  if (booking.paymentIntentId) {
+    paymentIntent = await stripe.paymentIntents.retrieve(
+      booking.paymentIntentId
+    );
+
+    // ✅ VERIFY intent belongs to booking
+    if (paymentIntent.metadata.bookingId !== bookingId) {
+      throw new AppError("PaymentIntent mismatch", 400);
+    }
+
+    // ✅ Already succeeded
+    if (paymentIntent.status === "succeeded") {
+      return res.json({
+        success: true,
+        clientSecret: null,
+        amount: booking.totalAmount,
+      });
+    }
+
+    // 🔁 If canceled → drop & recreate
+    if (paymentIntent.status === "canceled") {
+      await prisma.booking.update({
+        where: { id: bookingId },
+        data: { paymentIntentId: null },
+      });
+      paymentIntent = null;
+    }
+
+    // 🔄 Update amount if needed
+    if (
+      paymentIntent &&
+      paymentIntent.status === "requires_payment_method" &&
+      paymentIntent.amount !== amount * 100
+    ) {
+      paymentIntent = await stripe.paymentIntents.update(
+        booking.paymentIntentId,
+        { amount: amount * 100 }
+      );
+    }
+  }
+
+  // ================================
+  // 🆕 Create new PaymentIntent
+  // ================================
+  if (!paymentIntent) {
+    paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: amount * 100,
+        currency: "inr",
+        metadata: {
+          bookingId,
+          userId,
+          showId: booking.showId,
+        },
+      },
+      {
+        // ✅ Stripe idempotency
+        idempotencyKey: `booking_${bookingId}`,
+      }
+    );
+
+    // ✅ DB idempotency (paymentIntentId MUST be @unique)
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { paymentIntentId: paymentIntent.id },
+    });
+  }
 
   return res.json({
     success: true,
     clientSecret: paymentIntent.client_secret,
     amount,
-    ttlSeconds: LOCK_TTL_SECONDS,
+    ttlSeconds,
   });
 });

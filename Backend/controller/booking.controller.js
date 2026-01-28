@@ -44,184 +44,12 @@ const bookingDetailsKey = (version, bookingId) =>
 const adminBookingsKey = (version, limit, cursor) =>
   `bookings:v${version}:admin:list:limit=${limit}:cursor=${cursor || "null"}`;
 
-/**
- * POST /api/shows/:showId/lock
- * body: { seats: ["A1","A2"] }
- */
 
 
-/**
- * POST /api/bookings/confirm
- * body: { bookingId, paymentIntentId, skipLock }
- */
-export const confirmBooking = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const { bookingId, paymentIntentId, skipLock } = req.body;
 
-  const skipLockBool = skipLock === true || skipLock === "true";
 
-  if (!bookingId) throw new AppError("bookingId is required", 400);
-  if (!paymentIntentId) throw new AppError("paymentIntentId is required", 400);
-
-  // 1) Find booking (light select)
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    select: {
-      id: true,
-      userId: true,
-      showId: true,
-      bookedSeats: true,
-      isPaid: true,
-
-      user: { select: { email: true, name: true } },
-
-      show: {
-        select: {
-          id: true,
-          startTime: true,
-          movie: true,
-          screen: {
-            select: {
-              id: true,
-              name: true,
-              layout: true,
-              theatre: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!booking) throw new AppError("Booking not found", 404);
-  if (booking.userId !== userId) throw new AppError("Not allowed", 403);
-
-  if (booking.isPaid) {
-    return res.json({
-      success: true,
-      message: "Booking already confirmed",
-      booking,
-    });
-  }
-
-  const showId = booking.showId;
-  const seats = booking.bookedSeats;
-  const show = booking.show;
-
-  if (!show) throw new AppError("Show not found", 404);
-  if (!seats || seats.length === 0) throw new AppError("No seats in booking", 400);
-
-  // 2) Stripe verify
-  const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-  if (pi.status !== "succeeded") {
-    throw new AppError("Payment not completed", 400);
-  }
-
-  // metadata checks
-  if (pi.metadata?.userId !== userId) throw new AppError("Payment user mismatch", 403);
-  if (pi.metadata?.showId !== showId) throw new AppError("Payment show mismatch", 403);
-  if (pi.metadata?.bookingId !== bookingId)
-    throw new AppError("Payment booking mismatch", 403);
-
-  // 3) Check locked seats belong to this user (ONLY if skipLock is false)
-  const key = lockKey(showId);
-
-  if (!skipLockBool) {
-    const pipeline = redis.pipeline();
-    seats.forEach((seat) => pipeline.hget(key, seat));
-    const results = await pipeline.exec();
-
-    for (let i = 0; i < seats.length; i++) {
-      const lockedBy = results[i]?.[1];
-      if (lockedBy !== userId) {
-        throw new AppError(`Seat ${seats[i]} is not locked by you`, 409);
-      }
-    }
-  }
-
-  // 4) DB booking conflict check (only CONFIRMED, ignore current booking)
-  const bookingRows = await prisma.booking.findMany({
-    where: {
-      showId,
-      status: "CONFIRMED",
-      NOT: { id: bookingId },
-    },
-    select: { bookedSeats: true },
-  });
-
-  const alreadyBooked = new Set(bookingRows.flatMap((b) => b.bookedSeats));
-  const conflict = seats.find((s) => alreadyBooked.has(s));
-
-  if (conflict) throw new AppError(`Seat ${conflict} already booked`, 409);
-
-  // 5) Layout pricing
-  const totalAmount = calcTotalFromLayout(show.screen?.layout, seats);
-  if (totalAmount <= 0) throw new AppError("Invalid seat pricing", 400);
-
-  // Stripe amount check
-  const stripeAmount = (pi.amount_received || pi.amount) / 100;
-  if (Number(stripeAmount) !== Number(totalAmount)) {
-    throw new AppError("Payment amount mismatch", 400);
-  }
-
-  // 6) Update booking (✅ MUST BE CONFIRMED)
-  const updatedBooking = await prisma.booking.update({
-    where: { id: bookingId },
-    data: {
-      totalAmount,
-      isPaid: true,
-      paymentIntentId,
-      reminderSent: false,
-      status: "CONFIRMED", // ✅ FIXED
-    },
-    include: {
-      user: { select: { email: true, name: true } },
-      show: {
-        include: {
-          movie: true,
-          screen: { include: { theatre: true } },
-        },
-      },
-    },
-  });
-
-  // 7) Generate QR buffer
-  const qrBuffer = await generateBookingQRBuffer(updatedBooking.id);
-
-  // 8) Send email
-  await sendMail({
-    to: updatedBooking.user.email,
-    subject: "🎟 Booking Confirmed",
-    html: bookingConfirmTemplate(updatedBooking),
-    attachments: [
-      {
-        filename: `ticket-${updatedBooking.id}.png`,
-        content: qrBuffer,
-        cid: "booking_qr",
-      },
-    ],
-  });
-
-  // 9) Remove locks (ONLY if skipLock is false)
-  if (!skipLockBool) {
-    await redis.hdel(key, ...seats);
-  }
-
-  // invalidate booking caches
-  await bumpBookingsCacheVersion();
-
-  return res.status(200).json({
-    success: true,
-    message: "Booking confirmed",
-    booking: updatedBooking,
-  });
-});
-
-// =====================================
 // ADMIN: all bookings (cached)
 // GET /api/bookings/all?limit=20&cursor=xxx
-// =====================================
 export const getAllBookings = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const cursor = req.query.cursor || null;
@@ -244,6 +72,10 @@ export const getAllBookings = asyncHandler(async (req, res) => {
       skip: 1,
       cursor: { id: cursor },
     }),
+    where: {
+isPaid: true,
+status: "CONFIRMED",
+},
     select: {
       id: true,
       bookedSeats: true,
@@ -257,11 +89,11 @@ export const getAllBookings = asyncHandler(async (req, res) => {
         select: {
           id: true,
           startTime: true,
-          movie: { select: { id: true, title: true, posterPath: true } },
           screen: {
             select: {
               id: true,
               name: true,
+              screenNo:true,
               theatre: { select: { id: true, name: true, city: true } },
             },
           },
@@ -390,6 +222,7 @@ export const createBooking = asyncHandler(async (req, res) => {
     include: {
       screen: true,
     },
+     seatPrice:true,
   });
 
   if (!show) throw new AppError("Show not found", 404);
@@ -398,7 +231,7 @@ export const createBooking = asyncHandler(async (req, res) => {
   }
 
   // 3️⃣ Calculate total using layout
-  const totalAmount = calcTotalFromLayout(show.screen.layout, seats);
+  const totalAmount = calcTotalFromLayout(show.screen.layout, seats,show.seatPrice);
 
   if (!totalAmount || totalAmount <= 0) {
     throw new AppError("Invalid seat pricing", 400);

@@ -23,6 +23,12 @@ const fetchShows = async ({ pageParam = null }) => {
   return data;
 };
 
+const statusColor = {
+  UPCOMING: "text-green-400",
+  RUNNING: "text-yellow-400",
+  ENDED: "text-red-400",
+};
+
 const ListShows = () => {
   const currency = import.meta.env.VITE_CURRENCY || "₹";
 
@@ -60,13 +66,16 @@ const ListShows = () => {
     <>
       <Title text1="List" text2="Shows" />
 
-      <div className="max-w-4xl mt-6 overflow-x-auto">
+      <div className="max-w-6xl mt-6 overflow-x-auto">
         <table className="w-full border-collapse rounded-md overflow-hidden text-nowrap">
           <thead>
             <tr className="bg-primary/20 text-left text-white">
-              <th className="p-2 font-medium">Movie Name</th>
+              <th className="p-2 font-medium">Movie</th>
+              <th className="p-2 font-medium">Theatre</th>
+              <th className="p-2 font-medium">Screen</th>
               <th className="p-2 font-medium">Show Time</th>
-              <th className="p-2 font-medium">Total Bookings</th>
+              <th className="p-2 font-medium">Status</th>
+              <th className="p-2 font-medium">Tickets Sold</th>
               <th className="p-2 font-medium">Earnings</th>
             </tr>
           </thead>
@@ -74,26 +83,42 @@ const ListShows = () => {
           <tbody className="text-sm font-light">
             {shows.length === 0 ? (
               <tr>
-                <td className="p-3 text-gray-400" colSpan={4}>
+                <td className="p-3 text-gray-400" colSpan={7}>
                   No shows found
                 </td>
               </tr>
             ) : (
-              shows.map((show, index) => (
+              shows.map((show) => (
                 <tr
-                  key={show.id || index}
+                  key={show.id}
                   className="border-b border-primary/10 bg-primary/5 even:bg-primary/10"
                 >
-                  <td className="p-2 min-w-45 pl-5">
-                    {show?.movie?.title || "N/A"}
+                  <td className="p-2 pl-5">
+                    {show.movie?.title || "N/A"}
                   </td>
 
-                  <td className="p-2">{dateFormat(show?.startTime)}</td>
-
-                  <td className="p-2">{show?.totalBookings ?? 0}</td>
+                  <td className="p-2">
+                    {show.theatre?.name || "—"}
+                  </td>
 
                   <td className="p-2">
-                    {currency} {show?.earnings ?? 0}
+                    {show.screen?.name || "—"}
+                  </td>
+
+                  <td className="p-2">
+                    {dateFormat(show.startTime)}
+                  </td>
+
+                  <td className={`p-2 font-semibold ${statusColor[show.status]}`}>
+                    {show.status}
+                  </td>
+
+                  <td className="p-2">
+                    {show.stats?.ticketsSold ?? 0}
+                  </td>
+
+                  <td className="p-2">
+                    {currency} {show.earnings?.amount ?? 0}
                   </td>
                 </tr>
               ))
@@ -101,7 +126,7 @@ const ListShows = () => {
           </tbody>
         </table>
 
-        {/* Load More Button */}
+        {/* Load More */}
         {shows.length > 0 && (
           <div className="flex justify-center mt-6">
             {hasNextPage ? (

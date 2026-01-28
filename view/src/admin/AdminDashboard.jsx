@@ -54,14 +54,17 @@ const AdminDashboard = () => {
       setLoading(true);
 
       const { data } = await api.get("/admin/dashboard");
-         console.log(data)
+
       if (data?.success) {
         setDashboard(data.dashboard);
       } else {
         toast.error("Failed to load dashboard");
       }
     } catch (error) {
-      console.log("AdminDashboard error:", error?.response?.data || error.message);
+      console.log(
+        "AdminDashboard error:",
+        error?.response?.data || error.message
+      );
       toast.error(error?.response?.data?.message || "Dashboard load failed");
     } finally {
       setLoading(false);
@@ -108,21 +111,23 @@ const AdminDashboard = () => {
             border-primary/20 hover:-translate-y-1 transition duration-300"
           >
             <img
-              src={show.movie.poster_path}
+              src={show.movie?.posterPath || ""}
               alt=""
               className="h-60 w-full object-cover"
             />
 
-            <p className="font-medium p-2 truncate">{show.movie.title}</p>
+            <p className="font-medium p-2 truncate">
+              {show.movie?.title || "N/A"}
+            </p>
 
             <div className="flex items-center justify-between px-2">
               <p className="text-lg font-medium">
-                {currency} {show.movie.showPrice}
+                {currency} {show.seatPrice}
               </p>
 
               <p className="flex items-center gap-1 text-sm text-gray-400 mt-1 pr-1">
                 <StarIcon className="w-4 h-4 primary fill-primary" />
-                {(show.movie.vote_average || 0).toFixed(1)}
+                {(show.movie?.voteAverage || 0).toFixed(1)}
               </p>
             </div>
 
@@ -138,4 +143,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard; 
+export default AdminDashboard;
