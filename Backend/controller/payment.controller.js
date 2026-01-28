@@ -217,9 +217,7 @@ export const cancelPayment = asyncHandler(async (req, res) => {
     }
   }
 
-  // 3️⃣ Invalidate My Bookings cache
-  const version = await getBookingsCacheVersion();
-  await redis.del(myBookingsKey(version, booking.userId));
+
 
   return res.json({
     success: true,

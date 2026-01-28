@@ -250,7 +250,7 @@ export const createShow = asyncHandler(async (req, res) => {
   }
 
   // 3️⃣ Calculate startTime & endTime
-  const start = new Date(startTime);
+ const start = new Date(`${startTime}+05:30`);
 
   if (isNaN(start.getTime())) {
     throw new AppError("Invalid startTime", 400);
