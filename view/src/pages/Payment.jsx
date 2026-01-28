@@ -50,7 +50,10 @@ const Payment = () => {
         setSeats(data.seats || []); // ✅ FIX
       } catch (err) {
         toast.error(err?.response?.data?.message || "Payment expired");
-        navigate(`/shows/${showId}/seats`, { replace: true });
+           navigate(`/shows/${showId}/seats`, {
+  replace: true,
+  state: { expired: true }, // 👈 important
+});
       }
     };
 
@@ -119,7 +122,10 @@ navigate(`/payment/success/${bookingId}`, { replace: true });
     } finally {
       toast("Payment cancelled");
      await queryClient.invalidateQueries({ queryKey: ["myBookings"] });
-navigate(`/shows/${showId}/seats`, { replace: true });
+      navigate(`/shows/${showId}/seats`, {
+  replace: true,
+  state: { expired: true }, // 👈 important
+});
     }
   };
 

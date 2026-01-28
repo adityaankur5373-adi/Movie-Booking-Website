@@ -8,8 +8,15 @@ import { assets } from "../assets/assets";
 import isoTimeFormat from "../lib/isoTimeFormat";
 import api from "../api/api";
 import useAuthStore from "../store/useAuthStore";
-
+import { useLocation } from "react-router-dom";
 const SeatLayout = () => {
+  const location = useLocation();
+
+useEffect(() => {
+  if (location.state?.expired) {
+    toast.error("Your booking expired. Please select seats again.");
+  }
+}, [location.state]);
   const { showId } = useParams();
   const navigate = useNavigate();
 
