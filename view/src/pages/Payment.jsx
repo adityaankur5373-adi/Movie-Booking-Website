@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import api from "../api/api";
-
+import { useQueryClient } from "@tanstack/react-query";
 // Stripe
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 
 import { Clock3, ArrowLeft } from "lucide-react";
 
 const Payment = () => {
+    const queryClient = useQueryClient();
   const { showId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,7 +66,6 @@ const Payment = () => {
         if (prev <= 1000) {
           clearInterval(interval);
           toast.error("Payment time expired");
-          navigate(`/shows/${showId}/seats`, { replace: true });
           return 0;
         }
         return prev - 1000;
@@ -102,7 +102,8 @@ const Payment = () => {
       if (result.paymentIntent?.status === "succeeded") {
         if (confirmedRef.current) return;
         confirmedRef.current = true;
-        navigate(`/payment/success/${bookingId}`, { replace: true });
+       await queryClient.invalidateQueries({ queryKey: ["myBookings"] });
+navigate(`/payment/success/${bookingId}`, { replace: true });
       }
     } finally {
       setLoading(false);
@@ -117,7 +118,8 @@ const Payment = () => {
       console.error(err);
     } finally {
       toast("Payment cancelled");
-      navigate(`/shows/${showId}/seats`, { replace: true });
+     await queryClient.invalidateQueries({ queryKey: ["myBookings"] });
+navigate(`/shows/${showId}/seats`, { replace: true });
     }
   };
 

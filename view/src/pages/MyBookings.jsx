@@ -17,7 +17,8 @@ const MyBookings = () => {
   const { data: bookings = [], isLoading } = useQuery({
     queryKey: ["myBookings"],
     queryFn: fetchMyBookings,
-    staleTime: 60 * 1000,
+    staleTime: 0, // 🔥 IMPORTANT
+ refetchOnMount: "always",
   });
 
   if (isLoading) return <Loading />;
