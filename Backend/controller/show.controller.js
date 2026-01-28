@@ -64,40 +64,26 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
 
   const cached = await redis.get(cacheKey);
   if (cached) {
-    let shows = JSON.parse(cached);
-
-    // 🔥 FILTER ON READ (important)
-    const todayStr = new Date().toISOString().slice(0, 10);
-    if (date === todayStr) {
-      const bufferMinutes = 10;
-      const nowPlusBuffer = new Date(
-        Date.now() + bufferMinutes * 60 * 1000
-      );
-
-      shows = shows.filter(
-        (s) => new Date(s.startTime) >= nowPlusBuffer
-      );
-    }
-
     return res.json({
       success: true,
       source: "cache",
-      shows,
+      shows: JSON.parse(cached),
     });
   }
 
-  // 🧠 DB query (unchanged logic)
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const isToday = date === todayStr;
+  const now = new Date();
 
-  const bufferMinutes = 10;
-  const nowPlusBuffer = new Date(Date.now() + bufferMinutes * 60 * 1000);
+  // ✅ grace-based auto removal
+  const REMOVE_AFTER_MINUTES = 15;
+  const removeAfter = new Date(
+    now.getTime() - REMOVE_AFTER_MINUTES * 60 * 1000
+  );
 
   const shows = await prisma.show.findMany({
     where: {
       movieId,
       startTime: {
-        gte: isToday ? nowPlusBuffer : start,
+        gte: removeAfter, // 👈 keep visible after start
         lte: end,
       },
     },
@@ -123,15 +109,27 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  await redis.set(cacheKey, JSON.stringify(shows), "EX", 30);
+  // ✅ add runtime flags
+  const showsWithStatus = shows.map((show) => ({
+    ...show,
+    hasStarted: now >= show.startTime,
+    isBookable: now < show.startTime, // booking closes at start
+  }));
 
-  res.json({
+  // ✅ cache FINAL response
+  await redis.set(
+    cacheKey,
+    JSON.stringify(showsWithStatus),
+    "EX",
+    30
+  );
+
+  return res.json({
     success: true,
     source: "db",
-    shows,
+    shows: showsWithStatus,
   });
 });
-
 // =====================================
 // GET /api/shows/:showId  (SeatLayout page)
 // =====================================
@@ -334,37 +332,29 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   if (!theatreId) throw new AppError("theatreId is required", 400);
 
   const version = await getShowsCacheVersion();
-  const todayStr = new Date(
-  new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-)
-  .toISOString()
-  .slice(0, 10);
+
+  // ✅ single `now`
+  const now = new Date();
+
+  // ✅ IST-safe date key
+  const istDate = new Date(now.getTime() + 330 * 60 * 1000);
+  const todayStr = istDate.toISOString().slice(0, 10);
+
   const cacheKey = showsByTheatreKey(version, theatreId, todayStr);
 
   const cached = await redis.get(cacheKey);
   if (cached) {
-    let shows = JSON.parse(cached);
-
-    // 🔥 FILTER ON READ (important)
-    const bufferMinutes = 10;
-    const nowPlusBuffer = new Date(
-      Date.now() + bufferMinutes * 60 * 1000
-    );
-
-    shows = shows.filter(
-      (s) => new Date(s.startTime) >= nowPlusBuffer
-    );
-
     return res.json({
       success: true,
       source: "cache",
-      shows,
+      shows: JSON.parse(cached),
     });
   }
 
-  const bufferMinutes = 10;
-  const nowPlusBuffer = new Date(
-    Date.now() + bufferMinutes * 60 * 1000
+  // ✅ auto-remove after grace
+  const REMOVE_AFTER_MINUTES = 15;
+  const removeAfter = new Date(
+    now.getTime() - REMOVE_AFTER_MINUTES * 60 * 1000
   );
 
   const endOfDay = new Date();
@@ -374,7 +364,7 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     where: {
       screen: { is: { theatreId } },
       startTime: {
-        gte: nowPlusBuffer, // ✅ buffer applied
+        gte: removeAfter,
         lte: endOfDay,
       },
     },
@@ -405,9 +395,28 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  await redis.set(cacheKey, JSON.stringify(shows), "EX", 10);
+  // ✅ add runtime flags (NOT stored in DB)
+  const BOOKING_GRACE_MINUTES = 15;
 
-  res.json({ success: true, source: "db", shows });
+  const showsWithStatus = shows.map((show) => ({
+    ...show,
+    hasStarted: now >= show.startTime,
+    isBookable: now < show.startTime, // booking closes at start
+  }));
+
+  // ✅ cache the FINAL response
+  await redis.set(
+    cacheKey,
+    JSON.stringify(showsWithStatus),
+    "EX",
+    10
+  );
+
+  return res.json({
+    success: true,
+    source: "db",
+    shows: showsWithStatus,
+  });
 });
 
 // =====================================

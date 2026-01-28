@@ -207,7 +207,6 @@ export const createBooking = asyncHandler(async (req, res) => {
       userId,
       showId,
       isPaid: false,
-      bookedSeats: { equals: seats },
     },
   });
 
@@ -222,12 +221,14 @@ export const createBooking = asyncHandler(async (req, res) => {
       screen: true,
     },
   });
-
+ 
   if (!show) throw new AppError("Show not found", 404);
   if (!show.screen?.layout) {
     throw new AppError("Screen layout not configured", 500);
   }
-
+   if (new Date() >= show.startTime) {
+  throw new AppError("Show already started", 400);
+}
   // 3️⃣ Calculate total using layout
   const totalAmount = calcTotalFromLayout(show.screen.layout, seats,show.seatPrice);
 
