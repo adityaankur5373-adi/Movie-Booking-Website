@@ -55,21 +55,22 @@ const TheatreMovieCard = ({ movie, shows = [], onSelectShow }) => {
           const past = s?.isPast === true;
 
           return (
-            <button
-              key={s.showId}
-              disabled={past}
-              onClick={() => !past && onSelectShow?.(s.showId, s.time)}
-              className={`flex items-center gap-1 px-3 py-2 text-xs border transition rounded-full font-medium active:scale-95
-                ${
-                  past
-                    ? "border-white/10 text-gray-500 bg-black/30 cursor-not-allowed"
-                    : "border-white/30 text-white hover:bg-white hover:text-black cursor-pointer"
-                }`}
-            >
-              <ClockIcon className="w-4 h-4" />
-              {isoTimeFormat(s.time)}
-              <span className="text-xs opacity-70">({s.screenName})</span>
-            </button>
+          <button
+  key={s.id}
+  disabled={!s.isBookable}
+  onClick={() => s.isBookable && onSelectShow?.(s.id, s.startTime)}
+  className={`flex items-center gap-1 px-3 py-2 text-xs border transition 
+    rounded-full font-medium active:scale-95
+    ${
+      !s.isBookable
+        ? "border-white/10 text-gray-500 bg-black/30 cursor-not-allowed"
+        : "border-white/30 text-white hover:bg-white hover:text-black cursor-pointer"
+    }`}
+>
+  <ClockIcon className="w-4 h-4" />
+  {isoTimeFormat(s.startTime)}
+  <span className="text-xs opacity-70">({s.screen.name})</span>
+</button>
           );
         })}
       </div>

@@ -173,21 +173,32 @@ const MovieTheatres = () => {
                 </div>
 
                 {/* Show Times */}
-                <div className="flex flex-wrap gap-3">
-                  {item.shows.map((s) => (
-                    <button
-                      key={s.showId}
-                      onClick={() => {handleSelectShow(s.showId),scrollTo(0,0)}}
-                      className="flex items-center gap-2 px-4 py-2 text-sm rounded-full border border-white/30 text-white hover:bg-white hover:text-black transition active:scale-95"
-                    >
-                      <ClockIcon className="w-4 h-4" />
-                      {isoTimeFormat(s.time)}
-                      <span className="text-xs opacity-70">
-                        ({s.screenName})
-                      </span>
-                    </button>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-3">
+  {item.shows.map((s) => (
+    <button
+      key={s.id}
+      disabled={!s.isBookable}
+      onClick={() => {
+        if (!s.isBookable) return;
+        handleSelectShow(s.id);
+        scrollTo(0, 0);
+      }}
+      className={`flex items-center gap-2 px-4 py-2 text-sm rounded-full 
+        border transition active:scale-95
+        ${
+          !s.isBookable
+            ? "border-white/10 text-gray-500 bg-black/30 cursor-not-allowed"
+            : "border-white/30 text-white hover:bg-white hover:text-black cursor-pointer"
+        }`}
+    >
+      <ClockIcon className="w-4 h-4" />
+      {isoTimeFormat(s.startTime)}
+      <span className="text-xs opacity-70">
+        ({s.screen.name})
+      </span>
+    </button>
+  ))}
+</div>
               </div>
             </div>
           ))}
