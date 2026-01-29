@@ -48,22 +48,18 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
   // after checking seat locks
 for (const seat of seats) {
   const lockedBy = await redis.hget(redisKey, seat);
-
-  if (lockedBy !== userId) {
-    // 🔥 Mark booking expired (ONCE)
+     if (lockedBy !== userId) {
+  if (booking.status !== "EXPIRED") {
     await prisma.booking.update({
       where: { id: bookingId },
-      data: {
-        status: "EXPIRED",
-        expiredAt: new Date(),
-      },
+      data: { status: "EXPIRED", expiredAt: new Date() },
     });
-
-    // 🚫 Stop immediately
-    throw new AppError("Booking expired", 410);
   }
+  throw new AppError("Booking expired", 410);
 }
- 
+}
+   // refresh TTL
+await redis.expire(redisKey, LOCK_TTL_SECONDS);
   // 🔁 REFRESH LOCK TTL (important)
  
  const ttlSeconds = await redis.ttl(redisKey);
