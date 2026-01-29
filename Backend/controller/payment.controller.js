@@ -51,7 +51,6 @@ if (!exists) {
 for (const seat of seats) {
   const lockedBy = await redis.hget(redisKey, seat);
 
-  // seat lock expired in redis
   if (!lockedBy) {
     throw new AppError(
       "Seat lock expired. Please select seats again.",
@@ -59,7 +58,6 @@ for (const seat of seats) {
     );
   }
 
-  // seat locked by another user
   if (String(lockedBy) !== String(userId)) {
     throw new AppError(
       "Seat is no longer available.",
