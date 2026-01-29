@@ -18,13 +18,15 @@ const MovieTheatres = () => {
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Fetch Movie + Shows
+  // ========================
+  // Fetch Movie + Shows
+  // ========================
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
 
-        // 1) Movie details
+        // 1️⃣ Movie details
         const movieRes = await api.get(`/movies/${movieId}`);
         if (movieRes.data?.success) {
           setMovie(movieRes.data.movie);
@@ -32,9 +34,10 @@ const MovieTheatres = () => {
           setMovie(null);
         }
 
-        // 2) Shows by movie + date
+        // 2️⃣ Shows by movie + date
         if (!selectedDate) {
           setShows([]);
+          setLoading(false);
           return;
         }
 
@@ -59,13 +62,14 @@ const MovieTheatres = () => {
     fetchData();
   }, [movieId, selectedDate]);
 
-  // ✅ Group shows by theatre (Performance optimized)
+  // ========================
+  // Group shows by theatre
+  // ========================
   const theatresWithShows = useMemo(() => {
     const grouped = shows.reduce((acc, s) => {
       const theatre = s?.screen?.theatre;
-      const screen = s?.screen;
 
-      if (!theatre || !screen) return acc;
+      if (!theatre) return acc;
 
       const theatreId = theatre.id;
 
@@ -76,20 +80,18 @@ const MovieTheatres = () => {
         };
       }
 
-      acc[theatreId].shows.push({
-        showId: s.id,
-        time: s.startTime,
-        screenName: screen.name,
-        screenId: screen.id,
-      });
+      // ✅ push FULL backend object (NO reshaping)
+      acc[theatreId].shows.push(s);
 
       return acc;
     }, {});
 
-    // convert object -> array + sort show times
+    // convert object → array & sort by time
     return Object.values(grouped).map((t) => ({
       ...t,
-      shows: t.shows.sort((a, b) => new Date(a.time) - new Date(b.time)),
+      shows: t.shows.sort(
+        (a, b) => new Date(a.startTime) - new Date(b.startTime)
+      ),
     }));
   }, [shows]);
 
@@ -106,7 +108,7 @@ const MovieTheatres = () => {
       <BlurCircle top="150px" left="0px" />
       <BlurCircle bottom="150px" right="0px" />
 
-      {/* Movie Header */}
+      {/* ================= Movie Header ================= */}
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <img
           src={movie.posterPath || movie.poster_path}
@@ -115,7 +117,9 @@ const MovieTheatres = () => {
         />
 
         <div className="flex-1">
-          <h1 className="text-2xl md:text-3xl font-semibold">{movie.title}</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold">
+            {movie.title}
+          </h1>
 
           <p className="text-sm text-gray-400 mt-2 line-clamp-2">
             {movie.overview}
@@ -129,7 +133,7 @@ const MovieTheatres = () => {
         </div>
       </div>
 
-      {/* Theatres List */}
+      {/* ================= Theatre List ================= */}
       <h2 className="text-lg font-medium mt-14 mb-6">
         Select Theatre & Time
       </h2>
@@ -162,7 +166,6 @@ const MovieTheatres = () => {
                       {item.theatre.area}, {item.theatre.city}
                     </p>
 
-                    {/* Screens count not available unless you store it */}
                     <p className="flex items-center gap-2">
                       <FilmIcon className="w-4 h-4 text-primary" />
                       {item.theatre.screenList?.length
@@ -173,32 +176,32 @@ const MovieTheatres = () => {
                 </div>
 
                 {/* Show Times */}
-              <div className="flex flex-wrap gap-3">
-  {item.shows.map((s) => (
-    <button
-      key={s.id}
-      disabled={!s.isBookable}
-      onClick={() => {
-        if (!s.isBookable) return;
-        handleSelectShow(s.id);
-        scrollTo(0, 0);
-      }}
-      className={`flex items-center gap-2 px-4 py-2 text-sm rounded-full 
-        border transition active:scale-95
-        ${
-          !s.isBookable
-            ? "border-white/10 text-gray-500 bg-black/30 cursor-not-allowed"
-            : "border-white/30 text-white hover:bg-white hover:text-black cursor-pointer"
-        }`}
-    >
-      <ClockIcon className="w-4 h-4" />
-      {isoTimeFormat(s.startTime)}
-      <span className="text-xs opacity-70">
-        ({s.screen.name})
-      </span>
-    </button>
-  ))}
-</div>
+                <div className="flex flex-wrap gap-3">
+                  {item.shows.map((s) => (
+                    <button
+                      key={s.id}
+                      disabled={!s.isBookable}
+                      onClick={() => {
+                        if (!s.isBookable) return;
+                        handleSelectShow(s.id);
+                        scrollTo(0, 0);
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm rounded-full 
+                        border transition active:scale-95
+                        ${
+                          !s.isBookable
+                            ? "border-white/10 text-gray-500 bg-black/30 cursor-not-allowed"
+                            : "border-white/30 text-white hover:bg-white hover:text-black cursor-pointer"
+                        }`}
+                    >
+                      <ClockIcon className="w-4 h-4" />
+                      {isoTimeFormat(s.startTime)}
+                      <span className="text-xs opacity-70">
+                        ({s.screen.name})
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           ))}
