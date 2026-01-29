@@ -41,7 +41,7 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
   const seats = booking.bookedSeats;
   const redisKey = lockKey(booking.showId);
-
+   await redis.expire(redisKey, 10 * 60);
   // 🔒 Enforce seat lock ownership
   // after checking seat locks
   const exists = await redis.exists(redisKey);

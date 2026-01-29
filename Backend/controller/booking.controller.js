@@ -266,7 +266,6 @@ for (const seat of seats) {
       status: "PENDING",
     },
   });
-  await redis.expire(redisKey, LOCK_TTL_SECONDS);
   await bumpBookingsCacheVersion();
 
   res.json({ success: true, booking });
