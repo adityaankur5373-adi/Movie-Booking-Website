@@ -38,29 +38,33 @@ const bookingId = new URLSearchParams(location.search).get("bookingId");
   }, [bookingId, navigate]);
 
   // ✅ Create PaymentIntent
-  useEffect(() => {
-    if (!bookingId) return;
+  const intentCreatedRef = useRef(false);
 
-    const createIntent = async () => {
-      try {
-        const { data } = await api.post("/payments/create-intent", {
-          bookingId,
-        });
+useEffect(() => {
+  if (!bookingId) return;
+  if (intentCreatedRef.current) return; // 🛑 STOP duplicate calls
 
-        setShowId(data.showId);
-        setClientSecret(data.clientSecret);
-        setAmount(data.amount);
-        setTimeLeft(data.ttlSeconds * 1000);
-        setSeats(data.seats || []);
-      } catch (err) {
-        toast.error(err?.response?.data?.message || "Payment expired");
-        navigate("/my-bookings", { replace: true });
-      }
-    };
+  intentCreatedRef.current = true;
 
-    createIntent();
-  }, [bookingId, navigate]);
+  const createIntent = async () => {
+    try {
+      const { data } = await api.post("/payments/create-intent", {
+        bookingId,
+      });
 
+      setShowId(data.showId);
+      setClientSecret(data.clientSecret);
+      setAmount(data.amount);
+      setTimeLeft(data.ttlSeconds * 1000);
+      setSeats(data.seats || []);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Payment expired");
+      navigate("/my-bookings", { replace: true });
+    }
+  };
+
+  createIntent();
+}, [bookingId, navigate]);
   // ⏱ Countdown (state only, no side-effects)
   useEffect(() => {
     if (!timeLeft) return;
