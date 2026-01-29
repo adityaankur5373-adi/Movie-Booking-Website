@@ -26,9 +26,6 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
   if (!booking) throw new AppError("Booking not found", 404);
   if (booking.userId !== userId) throw new AppError("Not allowed", 403);
- if (booking.status === "EXPIRED") {
-  throw new AppError("Booking expired", 410);
-}
   // ✅ Already paid → short-circuit
   if (booking.isPaid) {
     return res.json({
@@ -51,19 +48,17 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 if (!exists) {
   throw new AppError("Seat lock expired", 410);
 }
-
 for (const seat of seats) {
   const lockedBy = await redis.hget(redisKey, seat);
-
-  // 🔴 seat lock missing → treat as expired
-  if (!lockedBy) {
-    throw new AppError("Seat lock expired", 410);
+     if (String(lockedBy) !== String(userId)) {
+  if (booking.status !== "EXPIRED") {
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: "EXPIRED", expiredAt: new Date() },
+    });
   }
-
-  // 🔴 seat locked by another user
-  if (String(lockedBy) !== String(userId)) {
-    throw new AppError("Seat locked by another user", 410);
-  }
+  throw new AppError("Booking expired", 410);
+}
 }
    // refresh TTL
 await redis.expire(redisKey, LOCK_TTL_SECONDS);
