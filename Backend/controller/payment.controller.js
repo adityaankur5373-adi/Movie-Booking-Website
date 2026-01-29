@@ -8,7 +8,8 @@ import { calcTotalFromLayout } from "../utils/calcTotal.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 
-const lockKey = (showId) => `lock:show:${showId}`;
+const lockKey = (showId, userId) =>
+  `lock:show:${showId}:user:${userId}`;
 
 export const createPaymentIntent = asyncHandler(async (req, res) => {
   const userId = req.user.id;
@@ -27,7 +28,9 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
   if (!booking) throw new AppError("Booking not found", 404);
   if (booking.userId !== userId) throw new AppError("Not allowed", 403);
-
+ if (booking.status === "EXPIRED") {
+  throw new AppError("Booking expired", 410);
+}
   // ✅ Already paid → short-circuit
   if (booking.isPaid) {
     return res.json({
@@ -42,13 +45,13 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
   }
 
   const seats = booking.bookedSeats;
-  const redisKey = lockKey(booking.showId);
+const redisKey = lockKey(booking.showId, userId);
 
   // 🔒 Enforce seat lock ownership
   // after checking seat locks
 for (const seat of seats) {
   const lockedBy = await redis.hget(redisKey, seat);
-     if (lockedBy !== userId) {
+     if (String(lockedBy) !== String(userId)) {
   if (booking.status !== "EXPIRED") {
     await prisma.booking.update({
       where: { id: bookingId },
@@ -190,7 +193,7 @@ export const cancelPayment = asyncHandler(async (req, res) => {
   });
 
   // 2️⃣ Release seat locks (Redis)
-  const key = `lock:show:${booking.showId}`;
+ const key = lockKey(booking.showId, userId);
 
   if (booking.bookedSeats?.length) {
     const pipeline = redis.pipeline();

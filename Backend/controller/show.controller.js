@@ -6,7 +6,9 @@ import redis from "../config/redis.js";
 import { lockSeatsLua } from "../utils/seatLock.lua.js";
 
 const LOCK_TTL_SECONDS = 300; // 5 mins
-const lockKey = (showId) => `lock:show:${showId}`;
+
+const lockKey = (showId, userId) =>
+  `lock:show:${showId}:user:${userId}`;
 
 // =====================================
 // ✅ Cache Versioning (Shows)
@@ -199,16 +201,13 @@ export const getShowById = asyncHandler(async (req, res) => {
   const bookedSeats = bookingRows.flatMap((b) => b.bookedSeats);
 
   // ✅ locked seats ALWAYS fresh from Redis
-  const lockedMap = await redis.hgetall(lockKey(showId));
-  const lockedSeats = Object.keys(lockedMap || {});
-
   res.json({
     success: true,
     source: cached ? "cache+freshSeats" : "db+freshSeats",
     show: {
       ...baseShow,
       bookedSeats,
-      lockedSeats,
+       lockedSeats: [],
     },
   });
 });
@@ -454,15 +453,16 @@ export const lockSeats = asyncHandler(async (req, res) => {
     throw new AppError(`Seat ${conflictBooked} already booked`, 409);
   }
 
-  const result = await redis.eval(
-    lockSeatsLua,
-    1,
-    lockKey(showId),
-    LOCK_TTL_SECONDS,
-    userId,
-    ...seats
-  );
+  const redisKey = lockKey(showId, userId);
 
+const result = await redis.eval(
+  lockSeatsLua,
+  1,
+  redisKey,
+  LOCK_TTL_SECONDS,
+  userId,
+  ...seats
+);
   if (Array.isArray(result) && result[0] === 0) {
     throw new AppError(`Seat ${result[1]} is already locked`, 409);
   }
@@ -477,41 +477,7 @@ export const lockSeats = asyncHandler(async (req, res) => {
   });
 });
 
-// =====================================
-// POST /api/shows/:showId/unlock
-// =====================================
-export const unlockSeats = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const { showId } = req.params;
-  const { seats } = req.body;
 
-  if (!showId) throw new AppError("showId is required", 400);
-  if (!seats || !Array.isArray(seats) || seats.length === 0) {
-    throw new AppError("seats array is required", 400);
-  }
-
-  const key = lockKey(showId);
-
-  const pipeline = redis.pipeline();
-  seats.forEach((seat) => pipeline.hget(key, seat));
-  const results = await pipeline.exec();
-
-  const toDelete = [];
-  results.forEach((r, i) => {
-    const lockedBy = r?.[1];
-    if (lockedBy === userId) toDelete.push(seats[i]);
-  });
-
-  if (toDelete.length > 0) {
-    await redis.hdel(key, ...toDelete);
-  }
-
-  return res.json({
-    success: true,
-    message: "Seats unlocked",
-    seats,
-  });
-});
 const getShowStatus = (now, startTime, endTime) => {
   if (now < startTime) return "UPCOMING";
   if (now >= startTime && now <= endTime) return "RUNNING";
