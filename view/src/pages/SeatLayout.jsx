@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import Loading from "../components/Loading";
 import BlurCircle from "../components/BlurCircle";
@@ -8,15 +8,16 @@ import { assets } from "../assets/assets";
 import isoTimeFormat from "../lib/isoTimeFormat";
 import api from "../api/api";
 import useAuthStore from "../store/useAuthStore";
-import { useLocation } from "react-router-dom";
+
 const SeatLayout = () => {
   const location = useLocation();
 
-useEffect(() => {
-  if (location.state?.expired) {
-    toast.error("Your booking expired. Please select seats again.");
-  }
-}, [location.state]);
+  useEffect(() => {
+    if (location.state?.expired) {
+      toast.error("Your booking expired. Please select seats again.");
+    }
+  }, [location.state]);
+
   const { showId } = useParams();
   const navigate = useNavigate();
 
@@ -26,73 +27,61 @@ useEffect(() => {
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ prevent unlock when user clicks proceed (payment page needs lock)
   const proceedingRef = useRef(false);
 
-  // ✅ Fetch show from backend
+  // ========================
+  // Fetch show
+  // ========================
   useEffect(() => {
     const fetchShow = async () => {
       try {
         setLoading(true);
-
         const { data } = await api.get(`/shows/${showId}`);
-
-        if (data?.success) {
-          setShow(data.show);
-        } else {
-          setShow(null);
-        }
-
+        if (data?.success) setShow(data.show);
+        else setShow(null);
         setSelectedSeats([]);
       } catch (err) {
-        console.log("SeatLayout error:", err?.response?.data || err.message);
         toast.error("Failed to load show details");
         setShow(null);
       } finally {
         setLoading(false);
       }
     };
-
     fetchShow();
   }, [showId]);
 
-  // ✅ Auto Refresh show (booked/locked seats update)
+  // ========================
+  // Auto refresh show
+  // ========================
   const refreshShow = async () => {
     try {
       const { data } = await api.get(`/shows/${showId}`);
       if (data?.success) setShow(data.show);
-    } catch (err) {
-      console.log("refresh error:", err?.response?.data || err.message);
-    }
+    } catch {}
   };
 
- useEffect(() => {
-  if (!showId || proceedLoading) return; // ⛔ pause refresh while proceeding
+  useEffect(() => {
+    if (!showId || proceedLoading) return;
+    const interval = setInterval(refreshShow, 3000);
+    return () => clearInterval(interval);
+  }, [showId, proceedLoading]);
 
-  const interval = setInterval(() => {
-    refreshShow();
-  }, 3000);
-
-  return () => clearInterval(interval);
-}, [showId, proceedLoading]);
-
-  // ✅ Layout from DB
+  // ========================
+  // Layout + booked seats
+  // ========================
   const layout = useMemo(() => show?.screen?.layout || null, [show]);
-
-  // ✅ Booked seats from backend
   const bookedSeats = useMemo(() => show?.bookedSeats || [], [show]);
 
-  // ✅ Locked seats from backend
-  const lockedSeats = useMemo(() => show?.lockedSeats || [], [show]);
-
-  // ✅ booked OR locked = unavailable
-  const isUnavailable = (seatId) =>
-    bookedSeats.includes(seatId) || lockedSeats.includes(seatId);
+  // ✅ REQUIRED CHANGE:
+  // ONLY booked seats are unavailable
+  const isUnavailable = (seatId) => bookedSeats.includes(seatId);
 
   const toggleSeat = (seatId) => {
     if (!show) return;
 
-    if (isUnavailable(seatId)) return toast.error("Seat not available");
+    if (isUnavailable(seatId)) {
+      return toast.error("Seat not available");
+    }
 
     if (!selectedSeats.includes(seatId) && selectedSeats.length >= 5) {
       return toast("You can only select 5 seats");
@@ -116,121 +105,115 @@ useEffect(() => {
      ${selected ? "bg-green-500/20 border-green-400 text-green-200" : ""}`;
 
   const renderRow = (secLabel, row, leftCount, rightCount) => {
-  const left = Array.from({ length: leftCount }, (_, i) => `${row}${i + 1}`);
-  const right = Array.from(
-    { length: rightCount },
-    (_, i) => `${row}${leftCount + i + 1}`
-  );
+    const left = Array.from({ length: leftCount }, (_, i) => `${row}${i + 1}`);
+    const right = Array.from(
+      { length: rightCount },
+      (_, i) => `${row}${leftCount + i + 1}`
+    );
 
-  const makeSeatId = (seat) => `${secLabel}_${seat}`; // ✅ UNIQUE
+    const makeSeatId = (seat) => `${secLabel}_${seat}`;
 
-  return (
-    <div key={`${secLabel}_${row}`} className="flex items-center gap-4 mb-2">
-      <p className="w-6 text-xs text-gray-400">{row}</p>
+    return (
+      <div key={`${secLabel}_${row}`} className="flex items-center gap-4 mb-2">
+        <p className="w-6 text-xs text-gray-400">{row}</p>
 
-      {/* Left seats */}
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: `repeat(${leftCount}, 1fr)` }}
-      >
-        {left.map((seat) => {
-          const seatId = makeSeatId(seat);
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${leftCount}, 1fr)` }}
+        >
+          {left.map((seat) => {
+            const seatId = makeSeatId(seat);
+            return (
+              <button
+                key={seatId}
+                disabled={isUnavailable(seatId)}
+                onClick={() => toggleSeat(seatId)}
+                className={seatClass(
+                  selectedSeats.includes(seatId),
+                  isUnavailable(seatId)
+                )}
+              >
+                {seat.slice(1)}
+              </button>
+            );
+          })}
+        </div>
 
-          return (
-            <button
-              key={seatId}
-              disabled={isUnavailable(seatId)}
-              onClick={() => toggleSeat(seatId)}
-              className={seatClass(
-                selectedSeats.includes(seatId),
-                isUnavailable(seatId)
-              )}
-            >
-              {seat.slice(1)}
-            </button>
-          );
-        })}
+        <div className="w-8" />
+
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${rightCount}, 1fr)` }}
+        >
+          {right.map((seat) => {
+            const seatId = makeSeatId(seat);
+            return (
+              <button
+                key={seatId}
+                disabled={isUnavailable(seatId)}
+                onClick={() => toggleSeat(seatId)}
+                className={seatClass(
+                  selectedSeats.includes(seatId),
+                  isUnavailable(seatId)
+                )}
+              >
+                {seat.slice(1)}
+              </button>
+            );
+          })}
+        </div>
       </div>
+    );
+  };
 
-      {/* aisle */}
-      <div className="w-8" />
+  // ========================
+  // Total calculation
+  // ========================
+  const totalAmount = useMemo(() => {
+    if (!layout?.sections?.length) return 0;
+    let total = 0;
+    for (const seatId of selectedSeats) {
+      const [secLabel] = seatId.split("_");
+      const section = layout.sections.find((sec) => sec.label === secLabel);
+      if (section?.price) total += Number(section.price);
+    }
+    return total;
+  }, [layout, selectedSeats]);
 
-      {/* Right seats */}
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: `repeat(${rightCount}, 1fr)` }}
-      >
-        {right.map((seat) => {
-          const seatId = makeSeatId(seat);
+  // ========================
+  // Proceed
+  // ========================
+  const handleProceed = async () => {
+    if (!user) return toast.error("Please login");
+    if (selectedSeats.length === 0) return toast("Select at least 1 seat");
+    if (proceedLoading) return;
 
-          return (
-            <button
-              key={seatId}
-              disabled={isUnavailable(seatId)}
-              onClick={() => toggleSeat(seatId)}
-              className={seatClass(
-                selectedSeats.includes(seatId),
-                isUnavailable(seatId)
-              )}
-            >
-              {seat.slice(1)}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
+    try {
+      setProceedLoading(true);
 
-  // ✅ UI TOTAL CALCULATION (layout-wise)
- const totalAmount = useMemo(() => {
-  if (!layout?.sections?.length) return 0;
+      await api.post(`/shows/${showId}/lock`, {
+        seats: selectedSeats,
+      });
 
-  let total = 0;
+      const bookingRes = await api.post("/bookings/create", {
+        showId,
+        seats: selectedSeats,
+      });
 
-  for (const seatId of selectedSeats) {
-    const [secLabel] = seatId.split("_"); // "SILVER" / "GOLD"
-    const section = layout.sections.find((sec) => sec.label === secLabel);
-    if (section?.price) total += Number(section.price);
-  }
+      const bookingId = bookingRes.data.booking.id;
 
-  return total;
-}, [layout, selectedSeats]);
-  // ✅ LOCK + go to payment page
-     const handleProceed = async () => {
-  if (!user) return toast.error("Please login");
-  if (selectedSeats.length === 0) return toast("Select at least 1 seat");
-  if (proceedLoading) return;
+      navigate(`/payment/${showId}`, {
+        state: { bookingId },
+      });
 
-  try {
-    setProceedLoading(true);
+      setSelectedSeats([]);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to proceed");
+    } finally {
+      setProceedLoading(false);
+    }
+  };
 
-    // 1️⃣ Lock seats (Redis)
-    await api.post(`/shows/${showId}/lock`, {
-      seats: selectedSeats,
-    });
-
-    // 2️⃣ Create booking (DB)
-    const bookingRes = await api.post("/bookings/create", {
-      showId,
-      seats: selectedSeats,
-    });
-
-    const bookingId = bookingRes.data.booking.id;
-
-    // 3️⃣ Go to payment with ONLY bookingId
-    navigate(`/payment/${showId}`, {
-      state: { bookingId },
-    });
-
-    setSelectedSeats([]);
-  } catch (err) {
-    toast.error(err?.response?.data?.message || "Failed to proceed");
-  } finally {
-    setProceedLoading(false);
-  }
-};
- 
   if (loading) return <Loading />;
   if (!show || !layout) return <Loading />;
 
@@ -239,37 +222,29 @@ useEffect(() => {
       <BlurCircle top="-100px" left="-100px" />
       <BlurCircle bottom="0" right="0" />
 
-      {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Select Seats</h1>
           <p className="text-sm text-gray-400 mt-1">
-            {show?.movie?.title || "Movie"} • {show?.screen?.name || "Screen"} •{" "}
+            {show?.movie?.title} • {show?.screen?.name} •{" "}
             {isoTimeFormat(show.startTime)}
           </p>
         </div>
 
-        {/* Selected Summary */}
         <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur px-4 py-3">
           <p className="text-xs text-gray-400">Selected Seats</p>
           <p className="text-sm font-medium text-white">
-            {selectedSeats.length > 0 ? selectedSeats.join(", ") : "None"}
+            {selectedSeats.length ? selectedSeats.join(", ") : "None"}
           </p>
           <p className="text-xs text-gray-400 mt-1">Total: ₹{totalAmount}</p>
         </div>
       </div>
 
-      {/* Screen Image */}
       <div className="mt-10 flex flex-col items-center">
-        <img
-          src={assets.screenImage}
-          alt="screen"
-          className="max-w-[420px] w-full"
-        />
+        <img src={assets.screenImage} alt="screen" className="max-w-[420px]" />
         <p className="text-gray-400 text-sm mt-2">SCREEN THIS WAY</p>
       </div>
 
-      {/* Seat Sections */}
       <div className="max-w-3xl mx-auto mt-10">
         {layout.sections?.map((sec) => (
           <div key={sec.label} className="mb-8">
@@ -279,41 +254,23 @@ useEffect(() => {
             </div>
 
             <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-             {sec.rows?.map((row) =>
-    renderRow(sec.label, row, sec.leftCount, sec.rightCount)
-            )}
-
+              {sec.rows?.map((row) =>
+                renderRow(sec.label, row, sec.leftCount, sec.rightCount)
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Legend */}
-      <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-gray-300">
-        <div className="flex items-center gap-2">
-          <span className="h-4 w-4 rounded border border-gray-400/40" />
-          Available
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-4 w-4 rounded bg-green-500/20 border border-green-400" />
-          Selected
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-4 w-4 rounded border border-gray-700 bg-gray-800" />
-          Booked / Locked
-        </div>
-      </div>
-
-      {/* Proceed Button */}
       <div className="mt-10 flex justify-center">
         <button
-  onClick={handleProceed}
-  disabled={proceedLoading}
-  className="flex items-center gap-2 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
->
-  {proceedLoading ? "Locking..." : "Proceed to Checkout"}
-  <ArrowRightIcon className="w-4 h-4" strokeWidth={3} />
-</button>
+          onClick={handleProceed}
+          disabled={proceedLoading}
+          className="flex items-center gap-2 px-10 py-3 text-sm bg-primary hover:bg-primary-dull transition rounded-full font-medium active:scale-95 disabled:opacity-60"
+        >
+          {proceedLoading ? "Locking..." : "Proceed to Checkout"}
+          <ArrowRightIcon className="w-4 h-4" strokeWidth={3} />
+        </button>
       </div>
     </div>
   );
