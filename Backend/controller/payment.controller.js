@@ -7,14 +7,13 @@ import { calcTotalFromLayout } from "../utils/calcTotal.js";
 import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-const lockKey = (showId) => `lock:show:${showId}`;
-
 export const createPaymentIntent = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { bookingId } = req.body;
 
   if (!bookingId) throw new AppError("bookingId is required", 400);
 
+  // 1️⃣ Fetch booking
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
     include: {
@@ -26,7 +25,8 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
   if (!booking) throw new AppError("Booking not found", 404);
   if (booking.userId !== userId) throw new AppError("Not allowed", 403);
-  // ✅ Already paid → short-circuit
+
+  // ✅ already paid → short circuit
   if (booking.isPaid) {
     return res.json({
       success: true,
@@ -41,44 +41,51 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
   const seats = booking.bookedSeats;
   const redisKey = lockKey(booking.showId);
-   await redis.expire(redisKey, 10 * 60);
-  // 🔒 Enforce seat lock ownership
-  // after checking seat locks
-  const exists = await redis.exists(redisKey);
-if (!exists) {
-  throw new AppError("Seat lock expired", 410);
-}
-for (const seat of seats) {
-  const lockedBy = await redis.hget(redisKey, seat);
 
-  if (!lockedBy) {
+  // 2️⃣ CHECK TTL FIRST (do NOT revive dead locks)
+  const ttl = await redis.ttl(redisKey);
+
+  if (ttl <= 0) {
     throw new AppError(
       "Seat lock expired. Please select seats again.",
       410
     );
   }
 
-  if (String(lockedBy) !== String(userId)) {
-    throw new AppError(
-      "Seat is no longer available.",
-      409
-    );
+  // 3️⃣ EXTEND TTL ONCE (payment grace period)
+  await redis.expire(redisKey, LOCK_TTL_SECONDS);
+
+  // 4️⃣ FINAL seat ownership validation (AUTHORITATIVE)
+  for (const seat of seats) {
+    const lockedBy = await redis.hget(redisKey, seat);
+
+    if (!lockedBy) {
+      throw new AppError(
+        "Seat lock expired. Please select seats again.",
+        410
+      );
+    }
+
+    if (String(lockedBy) !== String(userId)) {
+      throw new AppError(
+        "Seat is no longer available.",
+        409
+      );
+    }
   }
-}
-   // refresh TTL
-  // 🔁 REFRESH LOCK TTL (important)
-   await redis.expire(redisKey, LOCK_TTL_SECONDS);
- const ttlSeconds = await redis.ttl(redisKey);
-  // 💰 Calculate amount server-side
+
+  // 5️⃣ Calculate amount server-side (authoritative)
   const amount = calcTotalFromLayout(
     booking.show.screen.layout,
     seats,
     booking.show.seatPrice
   );
 
-  if (amount <= 0) throw new AppError("Invalid amount", 400);
+  if (amount <= 0) {
+    throw new AppError("Invalid amount", 400);
+  }
 
-  // 💾 Persist amount safely
+  // 6️⃣ Persist amount if changed
   if (!booking.isPaid && booking.totalAmount !== amount) {
     await prisma.booking.update({
       where: { id: bookingId },
@@ -96,12 +103,12 @@ for (const seat of seats) {
       booking.paymentIntentId
     );
 
-    // ✅ VERIFY intent belongs to booking
+    // safety check
     if (paymentIntent.metadata.bookingId !== bookingId) {
       throw new AppError("PaymentIntent mismatch", 400);
     }
 
-    // ✅ Already succeeded
+    // already succeeded
     if (paymentIntent.status === "succeeded") {
       return res.json({
         success: true,
@@ -110,7 +117,7 @@ for (const seat of seats) {
       });
     }
 
-    // 🔁 If canceled → drop & recreate
+    // canceled → drop & recreate
     if (paymentIntent.status === "canceled") {
       await prisma.booking.update({
         where: { id: bookingId },
@@ -119,7 +126,7 @@ for (const seat of seats) {
       paymentIntent = null;
     }
 
-    // 🔄 Update amount if needed
+    // update amount if required
     if (
       paymentIntent &&
       paymentIntent.status === "requires_payment_method" &&
@@ -147,24 +154,25 @@ for (const seat of seats) {
         },
       },
       {
-        // ✅ Stripe idempotency
+        // Stripe idempotency
         idempotencyKey: `booking_${bookingId}`,
       }
     );
 
-    // ✅ DB idempotency (paymentIntentId MUST be @unique)
+    // DB idempotency
     await prisma.booking.update({
       where: { id: bookingId },
       data: { paymentIntentId: paymentIntent.id },
     });
   }
 
+  // 7️⃣ Final response
   return res.json({
     success: true,
     clientSecret: paymentIntent.client_secret,
     amount,
     seats,
-    ttlSeconds,
+    ttlSeconds: await redis.ttl(redisKey),
     showId: booking.show.id,
   });
 });

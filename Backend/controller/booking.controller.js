@@ -235,24 +235,14 @@ export const createBooking = asyncHandler(async (req, res) => {
   if (!totalAmount || totalAmount <= 0) {
     throw new AppError("Invalid seat pricing", 400);
   }
-   const redisKey = lockKey(showId);
+const redisKey = lockKey(showId);
+const ttl = await redis.ttl(redisKey);
 
-for (const seat of seats) {
-  const lockedBy = await redis.hget(redisKey, seat);
-
-  if (!lockedBy) {
-    throw new AppError(
-      "Seat lock expired. Please select seats again.",
-      410
-    );
-  }
-
-  if (String(lockedBy) !== String(userId)) {
-    throw new AppError(
-      "Seat is no longer available.",
-      409
-    );
-  }
+if (ttl <= 0) {
+  throw new AppError(
+    "Seat lock expired. Please select seats again.",
+    410
+  );
 }
   // 4️⃣ Create booking with correct total
   const booking = await prisma.booking.create({
