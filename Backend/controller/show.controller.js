@@ -465,7 +465,7 @@ const result = await redis.eval(
     throw new AppError(`Seat ${result[1]} is already locked`, 409);
   }
 
-  const ttlRemaining = await redis.ttl(lockKey(showId));
+  const ttlRemaining = await redis.ttl(redisKey);
 
   return res.json({
     success: true,
