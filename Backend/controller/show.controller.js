@@ -152,10 +152,7 @@ export const getShowById = asyncHandler(async (req, res) => {
         startTime: true,
         seatPrice: true,
         movie: {
-          select: {
-            id: true,
-            title: true,
-          },
+          select: { id: true, title: true },
         },
         screen: {
           select: {
@@ -189,7 +186,7 @@ export const getShowById = asyncHandler(async (req, res) => {
     await redis.set(cacheKey, JSON.stringify(baseShow), "EX", 60);
   }
 
-  // ✅ booked seats ALWAYS fresh from DB (only confirmed)
+  // ✅ confirmed seats from DB
   const bookingRows = await prisma.booking.findMany({
     where: { showId, status: "CONFIRMED" },
     select: { bookedSeats: true },
@@ -197,18 +194,21 @@ export const getShowById = asyncHandler(async (req, res) => {
 
   const bookedSeats = bookingRows.flatMap((b) => b.bookedSeats);
 
-  // ✅ locked seats ALWAYS fresh from Redis
+  // ✅ locked seats from Redis
+  const redisKey = lockKey(showId);
+  const lockedSeatsMap = await redis.hgetall(redisKey);
+  const lockedSeats = Object.keys(lockedSeatsMap);
+
   res.json({
     success: true,
     source: cached ? "cache+freshSeats" : "db+freshSeats",
     show: {
       ...baseShow,
       bookedSeats,
-       lockedSeats: [],
+      lockedSeats, // 🔥 FIXED
     },
   });
 });
-
 // =====================================
 // ADMIN: CREATE SHOW
 // POST /api/shows
