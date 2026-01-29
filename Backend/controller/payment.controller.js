@@ -66,7 +66,6 @@ for (const seat of seats) {
   }
 }
    // refresh TTL
-await redis.expire(redisKey, LOCK_TTL_SECONDS);
   // 🔁 REFRESH LOCK TTL (important)
  
  const ttlSeconds = await redis.ttl(redisKey);
