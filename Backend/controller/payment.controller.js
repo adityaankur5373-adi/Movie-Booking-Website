@@ -7,9 +7,7 @@ import { calcTotalFromLayout } from "../utils/calcTotal.js";
 import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-
-const lockKey = (showId, userId) =>
-  `lock:show:${showId}:user:${userId}`;
+const lockKey = (showId) => `lock:show:${showId}`;
 
 export const createPaymentIntent = asyncHandler(async (req, res) => {
   const userId = req.user.id;
@@ -45,7 +43,7 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
   }
 
   const seats = booking.bookedSeats;
-const redisKey = lockKey(booking.showId, userId);
+  const redisKey = lockKey(booking.showId);
 
   // 🔒 Enforce seat lock ownership
   // after checking seat locks
@@ -193,7 +191,7 @@ export const cancelPayment = asyncHandler(async (req, res) => {
   });
 
   // 2️⃣ Release seat locks (Redis)
- const key = lockKey(booking.showId, userId);
+const key = lockKey(booking.showId);
 
   if (booking.bookedSeats?.length) {
     const pipeline = redis.pipeline();

@@ -5,8 +5,7 @@ import AppError from "../utils/AppError.js";
 import redis from "../config/redis.js";
 import { lockSeatsLua } from "../utils/seatLock.lua.js";
 import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
-const lockKey = (showId, userId) =>
-  `lock:show:${showId}:user:${userId}`;
+const lockKey = (showId) => `lock:show:${showId}`;
 
 // =====================================
 // ✅ Cache Versioning (Shows)
@@ -450,8 +449,7 @@ export const lockSeats = asyncHandler(async (req, res) => {
   if (conflictBooked) {
     throw new AppError(`Seat ${conflictBooked} already booked`, 409);
   }
-
-  const redisKey = lockKey(showId, userId);
+const redisKey = lockKey(showId);
 
 const result = await redis.eval(
   lockSeatsLua,
@@ -464,8 +462,7 @@ const result = await redis.eval(
   if (Array.isArray(result) && result[0] === 0) {
     throw new AppError(`Seat ${result[1]} is already locked`, 409);
   }
-
-  const ttlRemaining = await redis.ttl(redisKey);
+const ttlRemaining = await redis.ttl(redisKey);
 
   return res.json({
     success: true,

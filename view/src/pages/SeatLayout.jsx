@@ -259,7 +259,20 @@ const SeatLayout = () => {
           </div>
         ))}
       </div>
-
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-gray-300">
+  <div className="flex items-center gap-2">
+    <span className="h-4 w-4 rounded border border-gray-400/40" />
+    Available
+  </div>
+  <div className="flex items-center gap-2">
+    <span className="h-4 w-4 rounded bg-green-500/20 border border-green-400" />
+    Selected
+  </div>
+  <div className="flex items-center gap-2">
+    <span className="h-4 w-4 rounded border-gray-700 bg-gray-800" />
+    Booked
+  </div>
+</div>
       <div className="mt-10 flex justify-center">
         <button
           onClick={handleProceed}
