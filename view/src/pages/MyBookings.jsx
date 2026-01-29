@@ -132,11 +132,10 @@ const MyBookings = () => {
                   {/* ✅ PENDING */}
                   {!item.isPaid && !isExpired && (
                     <button
+                      disabled={payingId === item.id}
                     onClick={() => {
 setPayingId(item.id);
-navigate(`/payment/${item.showId}`, {
-state: { bookingId: item.id },
-});
+navigate(`/payment/${item.showId}?bookingId=${item.id}`);
 }}
                       className="mt-3 px-6 py-2 rounded-full 
                                  bg-gradient-to-r from-pink-500 to-red-500 
