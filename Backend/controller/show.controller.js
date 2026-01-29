@@ -398,52 +398,49 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   }
 
   // ===== GRACE PERIOD (15 min after start) =====
-  const GRACE_MINUTES = 15;
-  const graceStart = new Date(now.getTime() - GRACE_MINUTES * 60 * 1000);
+ const GRACE_MINUTES = 15;
+const graceStart = new Date(now.getTime() - GRACE_MINUTES * 60 * 1000);
 
-  // ===== DB QUERY (TODAY ONLY) =====
-  const shows = await prisma.show.findMany({
-    where: {
-      screen: { is: { theatreId } },
-      startTime: {
-        gte: utcStartOfDay,
-        lte: utcEndOfDay,
-        not: { lt: graceStart }, // remove expired shows
+const shows = await prisma.show.findMany({
+  where: {
+    screen: { is: { theatreId } },
+    startTime: {
+      gte: graceStart,
+      lte: utcEndOfDay,
+    },
+  },
+  select: {
+    id: true,
+    startTime: true,
+    seatPrice: true,
+    movie: {
+      select: {
+        id: true,
+        title: true,
+        posterPath: true,
+        genres: { select: { id: true, name: true } },
+        voteAverage: true,
+        voteCount: true,
+        releaseDate: true,
+        runtime: true,
       },
     },
-    select: {
-      id: true,
-      startTime: true,
-      seatPrice: true,
-      movie: {
-        select: {
-          id: true,
-          title: true,
-          posterPath: true,
-          genres: { select: { id: true, name: true } },
-          voteAverage: true,
-          voteCount: true,
-          releaseDate: true,
-          runtime: true,
-        },
-      },
-      screen: {
-        select: {
-          id: true,
-          name: true,
-          layout: true,
-        },
+    screen: {
+      select: {
+        id: true,
+        name: true,
+        layout: true,
       },
     },
-    orderBy: { startTime: "asc" },
-  });
+  },
+  orderBy: { startTime: "asc" },
+});
 
-  // ===== RUNTIME FLAGS (NOT STORED) =====
-  const showsWithStatus = shows.map((show) => ({
-    ...show,
-    hasStarted: now >= show.startTime,
-    isBookable: now < show.startTime, // booking closes at start
-  }));
+const showsWithStatus = shows.map((show) => ({
+  ...show,
+  hasStarted: now >= show.startTime,
+  isBookable: now < show.startTime,
+}));
 
   // ===== CACHE FINAL RESPONSE =====
   await redis.set(cacheKey, JSON.stringify(showsWithStatus), "EX", 10);
