@@ -16,7 +16,7 @@ const Payment = () => {
   const stripe = useStripe();
   const elements = useElements();
 
-  const bookingId = location.state?.bookingId || null;
+const bookingId = new URLSearchParams(location.search).get("bookingId");
 
   const [showId, setShowId] = useState(null); // backend source of truth
   const [clientSecret, setClientSecret] = useState("");

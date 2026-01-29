@@ -202,9 +202,7 @@ const SeatLayout = () => {
 
       const bookingId = bookingRes.data.booking.id;
 
-      navigate(`/payment/${showId}`, {
-        state: { bookingId },
-      });
+      navigate(`/payment/${showId}?bookingId=${bookingId}`);
 
       setSelectedSeats([]);
     } catch (err) {
