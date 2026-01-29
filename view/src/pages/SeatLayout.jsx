@@ -166,13 +166,7 @@ useEffect(() => {
     );
   };
 
-  // ========================
 
-  // ========================
-
-  // ========================
-  // Proceed
-  // ========================
   const handleProceed = async () => {
   if (!user) return toast.error("Please login");
   if (selectedSeats.length === 0) return toast("Select at least 1 seat");
