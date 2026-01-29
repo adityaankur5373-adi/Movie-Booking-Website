@@ -4,7 +4,7 @@ import AppError from "../utils/AppError.js";
 import redis from "../config/redis.js";
 import { prisma } from "../config/prisma.js";
 import { calcTotalFromLayout } from "../utils/calcTotal.js";
-
+import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 

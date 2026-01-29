@@ -4,9 +4,7 @@ import AppError from "../utils/AppError.js";
 
 import redis from "../config/redis.js";
 import { lockSeatsLua } from "../utils/seatLock.lua.js";
-
-const LOCK_TTL_SECONDS = 300; // 5 mins
-
+import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
 const lockKey = (showId, userId) =>
   `lock:show:${showId}:user:${userId}`;
 
