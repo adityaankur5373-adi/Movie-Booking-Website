@@ -6,9 +6,9 @@ import { prisma } from "../config/prisma.js";
 import { calcTotalFromLayout } from "../utils/calcTotal.js";
 import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
+const lockKey = (showId) => `lock:show:${showId}`;
 export const createPaymentIntent = asyncHandler(async (req, res) => {
-  const lockKey = (showId) => `lock:show:${showId}`;
+ 
   const userId = req.user.id;
   const { bookingId } = req.body;
 
