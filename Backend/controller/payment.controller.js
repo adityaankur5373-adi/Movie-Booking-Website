@@ -47,17 +47,23 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
   // 🔒 Enforce seat lock ownership
   // after checking seat locks
+  const exists = await redis.exists(redisKey);
+if (!exists) {
+  throw new AppError("Seat lock expired", 410);
+}
+
 for (const seat of seats) {
   const lockedBy = await redis.hget(redisKey, seat);
-     if (String(lockedBy) !== String(userId)) {
-  if (booking.status !== "EXPIRED") {
-    await prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: "EXPIRED", expiredAt: new Date() },
-    });
+
+  // 🔴 seat lock missing → treat as expired
+  if (!lockedBy) {
+    throw new AppError("Seat lock expired", 410);
   }
-  throw new AppError("Booking expired", 410);
-}
+
+  // 🔴 seat locked by another user
+  if (String(lockedBy) !== String(userId)) {
+    throw new AppError("Seat locked by another user", 410);
+  }
 }
    // refresh TTL
 await redis.expire(redisKey, LOCK_TTL_SECONDS);
