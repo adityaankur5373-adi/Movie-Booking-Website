@@ -50,15 +50,22 @@ if (!exists) {
 }
 for (const seat of seats) {
   const lockedBy = await redis.hget(redisKey, seat);
-     if (String(lockedBy) !== String(userId)) {
-  if (booking.status !== "EXPIRED") {
-    await prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: "EXPIRED", expiredAt: new Date() },
-    });
+
+  // seat lock expired in redis
+  if (!lockedBy) {
+    throw new AppError(
+      "Seat lock expired. Please select seats again.",
+      410
+    );
   }
-  throw new AppError("Booking expired", 410);
-}
+
+  // seat locked by another user
+  if (String(lockedBy) !== String(userId)) {
+    throw new AppError(
+      "Seat is no longer available.",
+      409
+    );
+  }
 }
    // refresh TTL
 await redis.expire(redisKey, LOCK_TTL_SECONDS);
