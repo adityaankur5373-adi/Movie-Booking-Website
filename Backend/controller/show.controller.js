@@ -1,10 +1,7 @@
 import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
-
 import redis from "../config/redis.js";
-import { lockSeatsLua } from "../utils/seatLock.lua.js";
-import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
 const lockKey = (showId) => `lock:show:${showId}`;
 
 // =====================================
@@ -168,12 +165,14 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
 export const getShowById = asyncHandler(async (req, res) => {
   const { showId } = req.params;
 
+  // ========================
+  // 1️⃣ Cache static show data
+  // ========================
   const version = await getShowsCacheVersion();
   const cacheKey = showBaseKey(version, showId);
 
-  const cached = await redis.get(cacheKey);
-
   let baseShow;
+  const cached = await redis.get(cacheKey);
 
   if (cached) {
     baseShow = JSON.parse(cached);
@@ -212,33 +211,38 @@ export const getShowById = asyncHandler(async (req, res) => {
       startTime: show.startTime,
       seatPrice: show.seatPrice,
       movie: show.movie,
-      theatre: show.screen.theatre,
       screen: show.screen,
+      theatre: show.screen.theatre,
     };
 
+    // cache ONLY static data
     await redis.set(cacheKey, JSON.stringify(baseShow), "EX", 60);
   }
 
-  // ✅ confirmed seats from DB
+  // ========================
+  // 2️⃣ BOOKED seats ONLY (DB is truth)
+  // ========================
   const bookingRows = await prisma.booking.findMany({
-    where: { showId, status: "CONFIRMED" },
-    select: { bookedSeats: true },
+    where: {
+      showId,
+      status: "CONFIRMED",
+    },
+    select: {
+      bookedSeats: true,
+    },
   });
 
   const bookedSeats = bookingRows.flatMap((b) => b.bookedSeats);
 
-  // ✅ locked seats from Redis
-  const redisKey = lockKey(showId);
-  const lockedSeatsMap = await redis.hgetall(redisKey);
-  const lockedSeats = Object.keys(lockedSeatsMap);
-
+  // ========================
+  // 3️⃣ Response (NO locked seats)
+  // ========================
   res.json({
     success: true,
-    source: cached ? "cache+freshSeats" : "db+freshSeats",
+    source: cached ? "cache+dbSeats" : "db+dbSeats",
     show: {
       ...baseShow,
-      bookedSeats,
-      lockedSeats, // 🔥 FIXED
+      bookedSeats, // 🔴 permanently unavailable
     },
   });
 });
@@ -451,59 +455,7 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   });
 });
 // =====================================
-// POST /api/shows/:showId/lock
 // =====================================
-export const lockSeats = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const { showId } = req.params;
-  const { seats } = req.body;
-
-  if (!showId) throw new AppError("showId is required", 400);
-  if (!seats || !Array.isArray(seats) || seats.length === 0) {
-    throw new AppError("seats array is required", 400);
-  }
-
-  // show exists check (light)
-  const exists = await prisma.show.findUnique({
-    where: { id: showId },
-    select: { id: true },
-  });
-  if (!exists) throw new AppError("Show not found", 404);
-
-  // booked seats from DB (only confirmed)
-  const bookingRows = await prisma.booking.findMany({
-    where: { showId, status: "CONFIRMED" },
-    select: { bookedSeats: true },
-  });
-
-  const alreadyBooked = new Set(bookingRows.flatMap((b) => b.bookedSeats));
-
-  const conflictBooked = seats.find((s) => alreadyBooked.has(s));
-  if (conflictBooked) {
-    throw new AppError(`Seat ${conflictBooked} already booked`, 409);
-  }
-const redisKey = lockKey(showId);
-
-const result = await redis.eval(
-  lockSeatsLua,
-  1,
-  redisKey,
-  LOCK_TTL_SECONDS,
-  userId,
-  ...seats
-);
-  if (Array.isArray(result) && result[0] === 0) {
-    throw new AppError(`Seat ${result[1]} is already locked`, 409);
-  }
-const ttlRemaining = await redis.ttl(redisKey);
-
-  return res.json({
-    success: true,
-    message: "Seats locked successfully",
-    seats,
-    ttlRemaining,
-  });
-});
 
 
 const getShowStatus = (now, startTime, endTime) => {

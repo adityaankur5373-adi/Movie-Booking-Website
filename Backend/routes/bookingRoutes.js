@@ -6,7 +6,7 @@ import {
   getMyBookings,
   getAllBookings,
   getBookingById,
-  createBooking
+  createBooking,
 } from "../controller/booking.controller.js";
 
 
@@ -21,6 +21,7 @@ const router = express.Router();
 // confirm booking after payment success
 router.post("/create", protect, createBooking);
 // my bookings
+
 router.get("/me", protect, getMyBookings);
 
 // admin all bookings

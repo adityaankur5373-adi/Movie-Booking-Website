@@ -60,11 +60,11 @@ const SeatLayout = () => {
     } catch {}
   };
 
-  useEffect(() => {
-    if (!showId || proceedLoading) return;
-    const interval = setInterval(refreshShow, 3000);
-    return () => clearInterval(interval);
-  }, [showId, proceedLoading]);
+useEffect(() => {
+  if (!showId || proceedLoading || selectedSeats.length > 0) return;
+  const interval = setInterval(refreshShow, 3000);
+  return () => clearInterval(interval);
+}, [showId, proceedLoading, selectedSeats.length]);
 
   // ========================
   // Layout + booked seats
@@ -167,50 +167,40 @@ const SeatLayout = () => {
   };
 
   // ========================
-  // Total calculation
+
   // ========================
-  const totalAmount = useMemo(() => {
-    if (!layout?.sections?.length) return 0;
-    let total = 0;
-    for (const seatId of selectedSeats) {
-      const [secLabel] = seatId.split("_");
-      const section = layout.sections.find((sec) => sec.label === secLabel);
-      if (section?.price) total += Number(section.price);
-    }
-    return total;
-  }, [layout, selectedSeats]);
 
   // ========================
   // Proceed
   // ========================
   const handleProceed = async () => {
-    if (!user) return toast.error("Please login");
-    if (selectedSeats.length === 0) return toast("Select at least 1 seat");
-    if (proceedLoading) return;
+  if (!user) return toast.error("Please login");
+  if (selectedSeats.length === 0) return toast("Select at least 1 seat");
+  if (proceedLoading) return;
 
-    try {
-      setProceedLoading(true);
+  try {
+    setProceedLoading(true);
 
-      await api.post(`/shows/${showId}/lock`, {
-        seats: selectedSeats,
-      });
+    const { data } = await api.post("/bookings/create", {
+      showId,
+      seats: selectedSeats,
+    });
 
-      const bookingRes = await api.post("/bookings/create", {
-        showId,
-        seats: selectedSeats,
-      });
+    const bookingId = data.bookingId;
 
-      const bookingId = bookingRes.data.booking.id;
+    // ✅ bookingId goes in URL (no localStorage)
+    navigate(`/checkout/${bookingId}`);
 
-      navigate(`/payment/${showId}?bookingId=${bookingId}`);
-
-      setSelectedSeats([]);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to proceed");
-    } finally {
-      setProceedLoading(false);
-    }
-  };
+    setSelectedSeats([]);
+  } catch (err) {
+    toast.error(
+      err?.response?.data?.message ||
+        "Seat no longer available. Please select again."
+    );
+  } finally {
+    setProceedLoading(false);
+  }
+};
 
   if (loading) return <Loading />;
   if (!show || !layout) return <Loading />;
@@ -234,7 +224,9 @@ const SeatLayout = () => {
           <p className="text-sm font-medium text-white">
             {selectedSeats.length ? selectedSeats.join(", ") : "None"}
           </p>
-          <p className="text-xs text-gray-400 mt-1">Total: ₹{totalAmount}</p>
+         <p className="text-xs text-gray-400 mt-1">
+  Seats selected: {selectedSeats.length}
+</p>
         </div>
       </div>
 

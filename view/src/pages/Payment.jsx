@@ -1,35 +1,39 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import api from "../api/api";
-import { useQueryClient } from "@tanstack/react-query";
 import Loading from "../components/Loading";
+
 // Stripe
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { Clock3, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Clock3 } from "lucide-react";
 
 const Payment = () => {
-  const queryClient = useQueryClient();
+  const { bookingId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const stripe = useStripe();
   const elements = useElements();
 
-const bookingId = new URLSearchParams(location.search).get("bookingId");
-
-  const [showId, setShowId] = useState(null); // backend source of truth
-  const [clientSecret, setClientSecret] = useState("");
-  const [amount, setAmount] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(0);
+  // -------------------------
+  // State
+  // -------------------------
+  const [showId, setShowId] = useState(null);
   const [seats, setSeats] = useState([]);
+  const [amount, setAmount] = useState(0);
+  const [clientSecret, setClientSecret] = useState("");
+  const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [paymentFailed, setPaymentFailed] = useState(false);
 
-  const confirmedRef = useRef(false);
+  const intentCreatedRef = useRef(false);
   const expiredRef = useRef(false);
+  const confirmedRef = useRef(false);
 
-  // ✅ Invalid access guard (DO NOT use showId here)
+  // -------------------------
+  // Guard: invalid URL
+  // -------------------------
   useEffect(() => {
     if (!bookingId) {
       toast.error("Invalid booking");
@@ -37,71 +41,97 @@ const bookingId = new URLSearchParams(location.search).get("bookingId");
     }
   }, [bookingId, navigate]);
 
-  // ✅ Create PaymentIntent
-  const intentCreatedRef = useRef(false);
-
-useEffect(() => {
-  if (!bookingId) return;
-  if (intentCreatedRef.current) return; // 🛑 STOP duplicate calls
-
-  intentCreatedRef.current = true;
-
-  const createIntent = async () => {
-    try {
-      const { data } = await api.post("/payments/create-intent", {
-        bookingId,
-      });
-
-      setShowId(data.showId);
-      setClientSecret(data.clientSecret);
-      setAmount(data.amount);
-      setTimeLeft(data.ttlSeconds * 1000);
-      setSeats(data.seats || []);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Payment expired");
-      navigate("/my-bookings", { replace: true });
-    }
-  };
-
-  createIntent();
-}, [bookingId, navigate]);
-  // ⏱ Countdown (state only, no side-effects)
+  // -------------------------
+  // Load booking summary
+  // -------------------------
   useEffect(() => {
-    if (!timeLeft) return;
+    if (!bookingId) return;
+
+    const loadBooking = async () => {
+      try {
+        const { data } = await api.get(`/bookings/${bookingId}`);
+
+        if (data.status !== "PENDING") {
+          toast.error("Booking not available");
+          navigate("/my-bookings", { replace: true });
+          return;
+        }
+
+        setShowId(data.showId);
+        setSeats(data.bookedSeats || []);
+        setAmount(data.totalAmount || 0);
+
+        // derive TTL from expiresAt
+        const ttl =
+          new Date(data.expiresAt).getTime() - Date.now();
+        setTimeLeft(Math.max(ttl, 0));
+      } catch {
+        toast.error("Booking expired");
+        navigate("/my-bookings", { replace: true });
+      } finally {
+        setPageLoading(false);
+      }
+    };
+
+    loadBooking();
+  }, [bookingId, navigate]);
+
+  // -------------------------
+  // Create / reuse PaymentIntent
+  // -------------------------
+  useEffect(() => {
+    if (!bookingId || intentCreatedRef.current || pageLoading) return;
+
+    intentCreatedRef.current = true;
+
+    const createIntent = async () => {
+      try {
+        const { data } = await api.post(
+          `/payments/${bookingId}/pay`
+        );
+        setClientSecret(data.clientSecret);
+      } catch {
+        toast.error("Payment session expired");
+        navigate("/my-bookings", { replace: true });
+      }
+    };
+
+    createIntent();
+  }, [bookingId, pageLoading, navigate]);
+
+  // -------------------------
+  // Countdown timer
+  // -------------------------
+  useEffect(() => {
+    if (timeLeft <= 0) return;
 
     const interval = setInterval(() => {
-      setTimeLeft((prev) => prev - 1000);
+      setTimeLeft((t) => t - 1000);
     }, 1000);
 
     return () => clearInterval(interval);
   }, [timeLeft]);
 
-  // ⏱ Handle expiry safely
+  // -------------------------
+  // Handle expiry
+  // -------------------------
   useEffect(() => {
     if (timeLeft > 0 || expiredRef.current || !showId) return;
 
     expiredRef.current = true;
+    toast.error("Payment time expired");
 
-    (async () => {
-      toast.error("Payment time expired");
-      await queryClient.invalidateQueries({ queryKey: ["myBookings"] });
+    navigate(`/shows/${showId}/seats`, {
+      replace: true,
+      state: { expired: true },
+    });
+  }, [timeLeft, showId, navigate]);
 
-      navigate(`/shows/${showId}/seats`, {
-        replace: true,
-        state: { expired: true },
-      });
-    })();
-  }, [timeLeft, showId, navigate, queryClient]);
-
-  const minutes = Math.floor(timeLeft / 60000);
-  const seconds = Math.floor((timeLeft % 60000) / 1000);
-
-  // 💳 Pay Now
+  // -------------------------
+  // Pay now
+  // -------------------------
   const handlePayNow = async () => {
-    if (!stripe || !elements || !clientSecret || timeLeft <= 0) {
-      toast.error("Payment is not ready yet");
-      return;
-    }
+    if (!stripe || !elements || !clientSecret || timeLeft <= 0) return;
 
     try {
       setLoading(true);
@@ -117,54 +147,41 @@ useEffect(() => {
         return;
       }
 
-      if (result.paymentIntent?.status === "succeeded") {
-        if (confirmedRef.current) return;
+      if (
+        result.paymentIntent?.status === "succeeded" &&
+        !confirmedRef.current
+      ) {
         confirmedRef.current = true;
-
-        await queryClient.invalidateQueries({ queryKey: ["myBookings"] });
-        navigate(`/payment/success/${bookingId}`, { replace: true });
+        navigate(`/payment/success/${bookingId}`, {
+          replace: true,
+        });
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // ❌ Cancel Payment (guard added)
-  const handleCancelPayment = async () => {
-    if (!showId) {
-      navigate("/my-bookings", { replace: true });
-      return;
-    }
-
-    toast("Payment cancelled");
-
-    navigate(`/shows/${showId}/seats`, {
-      replace: true,
-      state: { expired: true },
-    });
-
-    try {
-      await api.post("/payments/cancel", { bookingId });
-    } finally {
-      queryClient.invalidateQueries({ queryKey: ["myBookings"] });
-    }
-  };
-    if (!clientSecret) {
-  return (
-    <Loading/>
-  );
-}
-  return (
+  // -------------------------
+  // Cancel payment
+  // -------------------------
   
+  const minutes = Math.floor(timeLeft / 60000);
+  const seconds = Math.floor((timeLeft % 60000) / 1000);
+
+  return (
     <div className="min-h-screen bg-gray-100 flex justify-center px-4 py-10">
-      <div className="w-full max-w-4xl grid lg:grid-cols-3 gap-6">
-        {/* PAYMENT */}
+      <div className="w-full max-w-5xl grid lg:grid-cols-3 gap-6">
+
+        {/* LEFT: PAYMENT */}
         <div className="lg:col-span-2 bg-white rounded-2xl shadow p-6">
-          <h1 className="text-xl font-semibold text-gray-900 mb-1">
+          <h1 className="text-xl font-semibold text-gray-900">
             Secure Payment
           </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Review your booking before paying
+          </p>
 
-          <div className="border rounded-xl p-4 bg-gray-50">
+          <div className="mt-6 border rounded-xl p-4 bg-gray-50">
             <CardElement />
           </div>
 
@@ -175,42 +192,54 @@ useEffect(() => {
           )}
 
           <button
-            disabled={loading || !clientSecret || timeLeft <= 0}
             onClick={handlePayNow}
-            className="mt-6 w-full bg-red-600 text-white py-3 rounded-xl"
+            disabled={loading || timeLeft <= 0}
+            className={`mt-6 w-full py-3 rounded-xl text-white font-medium
+              ${
+                timeLeft <= 0
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-red-600 hover:bg-red-700"
+              }`}
           >
-            {loading ? "Processing…" : `Pay ₹${amount || "—"}`}
+            {loading ? "Processing…" : `Pay ₹${amount}`}
           </button>
 
           <div className="mt-4 flex justify-between text-sm">
             <button
-              onClick={() => navigate("/my-bookings")}
+              onClick={() => navigate(-1)}
               className="flex items-center gap-1 text-gray-600"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
             </button>
 
-            <button
-              onClick={handleCancelPayment}
-              className="text-red-600 hover:underline"
-            >
-              Cancel Payment
-            </button>
           </div>
         </div>
 
-        {/* SUMMARY */}
+        {/* RIGHT: SUMMARY */}
         <div className="bg-white rounded-2xl shadow p-6 h-fit">
-          <p className=" text-black font-medium">Seats</p>
-          <p className='text-black'>{seats.length ? seats.join(", ") : "—"}</p>
-          <div className="mt-4 flex justify-between">
-            <span className='text-black'>Total</span>
-            <span  className='text-black'>₹{amount || "—"}</span>
+          <p className="text-sm text-gray-500">Seats</p>
+          <p className="text-gray-900 font-medium">
+            {seats.join(", ")}
+          </p>
+
+          <div className="mt-4 flex justify-between text-sm">
+            <span>Total</span>
+            <span className="font-semibold">₹{amount}</span>
           </div>
 
-          <div className="mt-4 flex justify-between text-red-600">
-            <span className='text-black'>Time left</span>
+          <div
+            className={`mt-4 flex items-center justify-between text-sm
+              ${
+                timeLeft < 60000
+                  ? "text-red-600 font-semibold"
+                  : "text-gray-700"
+              }`}
+          >
+            <span className="flex items-center gap-1">
+              <Clock3 className="w-4 h-4" />
+              Time left
+            </span>
             <span>
               {String(minutes).padStart(2, "0")}:
               {String(seconds).padStart(2, "0")}

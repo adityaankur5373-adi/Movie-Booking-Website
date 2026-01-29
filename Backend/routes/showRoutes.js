@@ -7,7 +7,6 @@ import {
   getShowsByMovie,
   getShowsByTheatre,
   getAllShowsAdmin,
-   lockSeats,
     getShowById,
 } from "../controller/show.controller.js";
 
@@ -20,11 +19,6 @@ router.post("/", protect, adminOnly, createShow);
 router.get("/all", protect, adminOnly, getAllShowsAdmin);
 router.get("/movie/:movieId", getShowsByMovie);
 router.get("/theatre/:theatreId", getShowsByTheatre);
-router.post("/:showId/lock", protect, lockSeats);
-
-// unlock seats
-
-
 // get show details (includes bookedSeats + lockedSeats)
 router.get("/:showId", getShowById);
 

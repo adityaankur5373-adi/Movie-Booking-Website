@@ -87,7 +87,7 @@ const App = () => {
 
         {/* OTHER ROUTES (NO LAYOUT) */}
         <Route
-          path="/payment/:showId"
+          path="/checkout/:bookingId"
           element={
             <ProtectedRoute>
               <Payment />

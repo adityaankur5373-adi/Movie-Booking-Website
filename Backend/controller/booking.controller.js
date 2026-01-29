@@ -6,16 +6,6 @@ import redis from "../config/redis.js";
 
 import { calcTotalFromLayout } from "../utils/calcTotal.js";
 
-
-
-import Stripe from "stripe";
-
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-const LOCK_TTL_SECONDS = 300; // 5 mins
-const lockKey = (showId) => `lock:show:${showId}`;
-
 // =====================================
 // Cache Versioning (Bookings)
 // =====================================
@@ -137,7 +127,9 @@ export const getBookingById = asyncHandler(async (req, res) => {
   if (cached) {
     const booking = JSON.parse(cached);
 
-    if (booking.userId !== userId) throw new AppError("Not allowed", 403);
+    if (booking.userId !== userId) {
+      throw new AppError("Not allowed", 403);
+    }
 
     return res.json({
       success: true,
@@ -157,17 +149,22 @@ export const getBookingById = asyncHandler(async (req, res) => {
       isPaid: true,
       status: true,
       createdAt: true,
+      expiredAt: true, // 🔥 REQUIRED
 
       show: {
         select: {
           id: true,
           startTime: true,
-          movie: { select: { id: true, title: true, posterPath: true } },
+          movie: {
+            select: { id: true, title: true, posterPath: true },
+          },
           screen: {
             select: {
               id: true,
               name: true,
-              theatre: { select: { id: true, name: true, city: true } },
+              theatre: {
+                select: { id: true, name: true, city: true },
+              },
             },
           },
         },
@@ -178,7 +175,14 @@ export const getBookingById = asyncHandler(async (req, res) => {
   if (!booking) throw new AppError("Booking not found", 404);
   if (booking.userId !== userId) throw new AppError("Not allowed", 403);
 
-  await redis.set(cacheKey, JSON.stringify(booking), "EX", 60);
+  if (booking.status === "EXPIRED") {
+    throw new AppError("Booking expired", 410);
+  }
+
+  // ✅ Cache ONLY stable bookings
+  if (booking.totalAmount > 0) {
+    await redis.set(cacheKey, JSON.stringify(booking), "EX", 60);
+  }
 
   res.json({
     success: true,
@@ -186,80 +190,104 @@ export const getBookingById = asyncHandler(async (req, res) => {
     booking,
   });
 });
-
 // =====================================
 // POST /api/bookings
 // =====================================
+export const createBooking = async (req, res, next) => {
+  try {
+    // 1️⃣ INPUT VALIDATION
+    const { showId, seats } = req.body;
+    const userId = req.user.id;
 
+    if (!showId || !Array.isArray(seats) || seats.length === 0) {
+      return res.status(400).json({ message: "Invalid input" });
+    }
 
-export const createBooking = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-  const { showId, seats } = req.body;
+    // 2️⃣ LOCK TIME (8 minutes)
+    const LOCK_TTL_SECONDS = 8 * 60;
+    const expiresAt = new Date(Date.now() + LOCK_TTL_SECONDS * 1000);
 
-  if (!showId) throw new AppError("showId is required", 400);
-  if (!seats || !Array.isArray(seats) || seats.length === 0) {
-    throw new AppError("seats array is required", 400);
+    // 3️⃣ REDIS LOCK (FAST CHECK)
+    for (const seatId of seats) {
+      const key = `seat_lock:${showId}:${seatId}`;
+
+      const locked = await redis.set(
+        key,
+        userId,
+        "NX", // only set if not exists
+        "EX", // auto expire
+        LOCK_TTL_SECONDS
+      );
+
+      if (!locked) {
+        // rollback redis locks
+        for (const s of seats) {
+          await redis.del(`seat_lock:${showId}:${s}`);
+        }
+        return res.status(409).json({
+          message: `Seat ${seatId} is already locked`,
+        });
+      }
+    }
+
+    // 4️⃣ CREATE BOOKING (PENDING)
+    const booking = await prisma.booking.create({
+      data: {
+        userId,
+        showId,
+        bookedSeats: seats,
+        totalAmount: 0, // calculate later
+        status: "PENDING",
+        expiredAt: expiresAt,
+      },
+    });
+
+    // 5️⃣ DB LOCK (FINAL AUTHORITY)
+    try {
+      await prisma.$transaction(
+        seats.map((seatId) =>
+          prisma.seatLock.create({
+            data: {
+              showId,
+              seatId,
+              userId,
+              bookingId: booking.id,
+              expiresAt,
+            },
+          })
+        )
+      );
+    } catch (err) {
+      // rollback redis if DB fails
+      for (const seatId of seats) {
+        await redis.del(`seat_lock:${showId}:${seatId}`);
+      }
+
+      // seat already locked in DB
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        return res.status(409).json({
+          message: "Seat already locked by another user",
+        });
+      }
+
+      throw err;
+    }
+
+    // 6️⃣ SUCCESS
+    return res.status(200).json({
+      message: "Seats locked successfully",
+      bookingId: booking.id,
+      expiresAt,
+    });
+  } catch (error) {
+    next(error);
   }
+};
 
-  // 1️⃣ Prevent duplicate pending booking
-  const existing = await prisma.booking.findFirst({
-    where: {
-      userId,
-      showId,
-      isPaid: false,
-    },
-  });
 
-  if (existing) {
-    return res.json({ success: true, booking: existing });
-  }
-
-  // 2️⃣ Get show + screen layout
-  const show = await prisma.show.findUnique({
-    where: { id: showId },
-    include: {
-      screen: true,
-    },
-  });
- 
-  if (!show) throw new AppError("Show not found", 404);
-  if (!show.screen?.layout) {
-    throw new AppError("Screen layout not configured", 500);
-  }
-   if (new Date() >= show.startTime) {
-  throw new AppError("Show already started", 400);
-}
-  // 3️⃣ Calculate total using layout
-  const totalAmount = calcTotalFromLayout(show.screen.layout, seats,show.seatPrice);
-
-  if (!totalAmount || totalAmount <= 0) {
-    throw new AppError("Invalid seat pricing", 400);
-  }
-const redisKey = lockKey(showId);
-const ttl = await redis.ttl(redisKey);
-
-if (ttl <= 0) {
-  throw new AppError(
-    "Seat lock expired. Please select seats again.",
-    410
-  );
-}
-  // 4️⃣ Create booking with correct total
-  const booking = await prisma.booking.create({
-    data: {
-      userId,
-      showId,
-      bookedSeats: seats,
-      totalAmount, // ✅ FIXED
-      isPaid: false,
-      reminderSent: false,
-      status: "PENDING",
-    },
-  });
-  await bumpBookingsCacheVersion();
-
-  res.json({ success: true, booking });
-});
 // =====================================
 // GET /api/bookings/my
 // =====================================

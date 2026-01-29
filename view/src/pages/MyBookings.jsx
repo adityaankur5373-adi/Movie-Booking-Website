@@ -1,46 +1,48 @@
-import React from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "../api/api";
 import Loading from "../components/Loading";
 import BlurCircle from "../components/BlurCircle";
 import { MapPin, Monitor } from "lucide-react";
-import { useState } from "react";
+
 const fetchMyBookings = async () => {
   const { data } = await api.get("/bookings/me");
   return data.bookings || [];
 };
 
 const MyBookings = () => {
-
   const navigate = useNavigate();
-    const [payingId, setPayingId] = useState(null);
- const {
-  data: bookings = [],
-  isLoading,
-  isError,
-  error,
-} = useQuery({
-  queryKey: ["myBookings"],
-  queryFn: fetchMyBookings,
-  staleTime: 0,
-  refetchOnMount: "always",
-});
+  const [payingId, setPayingId] = useState(null);
+
+  const {
+    data: bookings = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["myBookings"],
+    queryFn: fetchMyBookings,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
 
   if (isLoading) return <Loading />;
-   if (isError) {
-  return (
-    <div className="flex flex-col items-center justify-center h-screen text-white">
-      <p className="text-lg font-medium">Failed to load bookings</p>
-      <p className="text-sm text-gray-400 mt-2">
-        {error?.response?.data?.message || "Please try again"}
-      </p>
-    </div>
-  );
-}
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen text-white">
+        <p className="text-lg font-medium">Failed to load bookings</p>
+        <p className="text-sm text-gray-400 mt-2">
+          {error?.response?.data?.message || "Please try again"}
+        </p>
+      </div>
+    );
+  }
+
   return bookings.length > 0 ? (
     <div className="relative my-40 mb-60 px-6 md:px-16 lg:px-40 xl:px-44 overflow-hidden min-h-[80vh]">
-      {/* Background blur */}
       <BlurCircle top="120px" left="0px" />
       <BlurCircle bottom="120px" right="0px" />
 
@@ -55,8 +57,11 @@ const MyBookings = () => {
           const screen = show.screen;
           const theatre = screen?.theatre;
 
-          // ✅ REQUIRED ADDITION
-          const isExpired = !item.isPaid && item.status === "EXPIRED";
+          // ✅ STATUS FLAGS (LOGIC ONLY)
+          const isPending = item.status === "PENDING" && !item.isPaid;
+          const isExpired = item.status === "EXPIRED";
+          const isCancelled = item.status === "CANCELLED";
+          const isConfirmed = item.status === "CONFIRMED" && item.isPaid;
 
           return (
             <div
@@ -68,7 +73,6 @@ const MyBookings = () => {
               <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6">
                 {/* LEFT */}
                 <div className="flex gap-6 items-center">
-                  {/* Poster */}
                   {movie.posterPath && (
                     <img
                       src={movie.posterPath}
@@ -91,7 +95,6 @@ const MyBookings = () => {
                       {new Date(show.startTime).toLocaleString()}
                     </p>
 
-                    {/* Theatre + Screen */}
                     <div className="mt-3 space-y-1 text-sm text-gray-300">
                       <p className="flex items-center gap-1">
                         <MapPin className="w-4 h-4" />
@@ -109,7 +112,7 @@ const MyBookings = () => {
                 {/* RIGHT */}
                 <div className="text-right text-white space-y-2">
                   <p className="text-2xl font-semibold">
-                    ₹{item.totalAmount}
+                    ₹{item.totalAmount || 0}
                   </p>
 
                   <p className="text-sm text-gray-400">
@@ -120,7 +123,7 @@ const MyBookings = () => {
                     Seat Number: {item.bookedSeats.join(", ")}
                   </p>
 
-                  {/* ✅ EXPIRED */}
+                  {/* 🟡 EXPIRED */}
                   {isExpired && (
                     <span className="inline-block mt-3 px-4 py-1.5 
                                      rounded-full text-xs font-medium 
@@ -129,14 +132,23 @@ const MyBookings = () => {
                     </span>
                   )}
 
-                  {/* ✅ PENDING */}
-                  {!item.isPaid && !isExpired && (
+                  {/* 🔴 CANCELLED */}
+                  {isCancelled && (
+                    <span className="inline-block mt-3 px-4 py-1.5 
+                                     rounded-full text-xs font-medium 
+                                     bg-red-500/20 text-red-400">
+                      Cancelled
+                    </span>
+                  )}
+
+                  {/* 🔵 PENDING */}
+                  {isPending && (
                     <button
                       disabled={payingId === item.id}
-                    onClick={() => {
-setPayingId(item.id);
-navigate(`/payment/${item.showId}?bookingId=${item.id}`);
-}}
+                      onClick={() => {
+                        setPayingId(item.id);
+                        navigate(`/checkout/${item.id}`);
+                      }}
                       className="mt-3 px-6 py-2 rounded-full 
                                  bg-gradient-to-r from-pink-500 to-red-500 
                                  hover:from-pink-600 hover:to-red-600 
@@ -146,8 +158,8 @@ navigate(`/payment/${item.showId}?bookingId=${item.id}`);
                     </button>
                   )}
 
-                  {/* ✅ CONFIRMED */}
-                  {item.isPaid && (
+                  {/* 🟢 CONFIRMED */}
+                  {isConfirmed && (
                     <span className="inline-block mt-3 px-4 py-1.5 
                                      rounded-full text-xs font-medium 
                                      bg-green-500/20 text-green-400">

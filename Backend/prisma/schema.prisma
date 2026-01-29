@@ -13,8 +13,8 @@ model User {
   name       String?
   email      String      @unique
   password   String?
-  provider String @default("local")
-googleId String? @unique
+  provider   String      @default("local")
+  googleId   String?     @unique
   createdAt  DateTime    @default(now())
   role       Role        @default(USER)
   bookings   Booking[]
@@ -75,48 +75,50 @@ model Theatre {
 }
 
 model Screen {
-  id        String  @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
   screenNo  Int
   layout    Json
   theatreId String
-  theatre   Theatre @relation(fields: [theatreId], references: [id], onDelete: Cascade)
+  theatre   Theatre  @relation(fields: [theatreId], references: [id], onDelete: Cascade)
   shows     Show[]
   createdAt DateTime @default(now())
 }
 
 model Show {
-  id         String    @id @default(uuid())
+  id         String     @id @default(uuid())
   startTime  DateTime
-  endTime DateTime
+  endTime    DateTime
   seatPrice  Int
   movieId    String
   screenId   String
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime   @default(now())
   seatPrices Json?
   bookings   Booking[]
-  movie      Movie     @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  screen     Screen    @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  movie      Movie      @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  screen     Screen     @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  seatLocks  SeatLock[]
 
   @@unique([screenId, startTime])
   @@index([movieId])
 }
 
 model Booking {
-  id           String   @id @default(uuid())
-  userId       String
-  showId       String
-  paymentIntentId String? @unique
-  bookedSeats  String[]
-  status BookingStatus @default(PENDING)
-  totalAmount  Int
-  isPaid       Boolean  @default(false)
-  expiredAt DateTime?
-  createdAt    DateTime @default(now())
-  reminderSent Boolean  @default(false)
-  emailSent Boolean @default(false)
-  show         Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String        @id @default(uuid())
+  userId          String
+  showId          String
+  paymentIntentId String?       @unique
+  bookedSeats     String[]
+  status          BookingStatus @default(PENDING)
+  totalAmount     Int
+  isPaid          Boolean       @default(false)
+  expiredAt       DateTime?
+  createdAt       DateTime      @default(now())
+  reminderSent    Boolean       @default(false)
+  emailSent       Boolean       @default(false)
+  show            Show          @relation(fields: [showId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seatLocks       SeatLock[]
 
   @@index([userId, createdAt])
   @@index([showId])
@@ -138,6 +140,7 @@ enum Role {
   USER
   ADMIN
 }
+
 enum BookingStatus {
   PENDING
   CONFIRMED
@@ -145,3 +148,21 @@ enum BookingStatus {
   EXPIRED
 }
 
+model SeatLock {
+  id        String         @id @default(uuid())
+  showId    String
+  seatId    String
+  userId    String
+  bookingId String
+  show      Show           @relation(fields: [showId], references: [id])
+  booking   Booking        @relation(fields: [bookingId], references: [id])
+  status    SeatLockStatus @default(LOCKED)
+  expiresAt DateTime
+  createdAt DateTime       @default(now())
+}
+
+enum SeatLockStatus {
+  LOCKED
+  BOOKED
+  EXPIRED
+}

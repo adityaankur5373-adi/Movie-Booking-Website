@@ -8,8 +8,8 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-const POLL_INTERVAL = 2000;      // 2 seconds
-const MAX_POLL_TIME = 60_000;    // 1 minute max
+const POLL_INTERVAL = 2000;   // 2 seconds
+const MAX_POLL_TIME = 60000; // 1 minute
 
 const PaymentSuccess = () => {
   const { bookingId } = useParams();
@@ -19,6 +19,13 @@ const PaymentSuccess = () => {
   const [booking, setBooking] = useState(null);
   const [error, setError] = useState(null);
 
+  // 🔒 Guard: invalid URL
+  useEffect(() => {
+    if (!bookingId) {
+      navigate("/", { replace: true });
+    }
+  }, [bookingId, navigate]);
+
   useEffect(() => {
     let intervalId;
     let timeoutId;
@@ -27,35 +34,56 @@ const PaymentSuccess = () => {
     const fetchBooking = async () => {
       try {
         const { data } = await api.get(`/bookings/${bookingId}`);
-
         if (!isMounted) return;
 
-        if (data?.booking?.status === "CONFIRMED") {
+        const status = data?.booking?.status;
+
+        // ✅ CONFIRMED
+        if (status === "CONFIRMED") {
           setBooking(data.booking);
           setLoading(false);
-
           clearInterval(intervalId);
           clearTimeout(timeoutId);
+          return;
         }
-      } catch (err) {
-        // do NOT crash UI – webhook may still arrive
+
+        // ❌ EXPIRED
+        if (status === "EXPIRED") {
+          setLoading(false);
+          setError("Your booking expired. Seats have been released.");
+          clearInterval(intervalId);
+          clearTimeout(timeoutId);
+          return;
+        }
+
+        // ❌ CANCELLED
+        if (status === "CANCELLED") {
+          setLoading(false);
+          setError("Payment was cancelled.");
+          clearInterval(intervalId);
+          clearTimeout(timeoutId);
+          return;
+        }
+      } catch {
+        // webhook may still be processing – keep polling
         console.warn("Waiting for booking confirmation...");
       }
     };
 
-    // initial fetch
+    // Initial fetch
     fetchBooking();
 
-    // poll every 2 seconds
+    // Poll every 2s
     intervalId = setInterval(fetchBooking, POLL_INTERVAL);
 
-    // hard stop after 1 minute
+    // Hard stop after 1 minute
     timeoutId = setTimeout(() => {
       if (!isMounted) return;
-
       clearInterval(intervalId);
       setLoading(false);
-      setError("Payment completed, but booking confirmation is taking longer than expected.");
+      setError(
+        "Payment completed, but booking confirmation is taking longer than expected."
+      );
     }, MAX_POLL_TIME);
 
     return () => {
@@ -65,7 +93,7 @@ const PaymentSuccess = () => {
     };
   }, [bookingId]);
 
-  /* ---------------- Loading State ---------------- */
+  /* ---------------- Loading ---------------- */
   if (loading) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center bg-white px-4">
@@ -82,7 +110,7 @@ const PaymentSuccess = () => {
     );
   }
 
-  /* ---------------- Timeout / Error State ---------------- */
+  /* ---------------- Error / Timeout ---------------- */
   if (error) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4">
@@ -90,9 +118,7 @@ const PaymentSuccess = () => {
           <h2 className="text-xl font-semibold text-gray-900">
             Almost there!
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            {error}
-          </p>
+          <p className="mt-2 text-sm text-gray-600">{error}</p>
 
           <div className="mt-6 flex flex-col gap-3">
             <button
@@ -113,7 +139,7 @@ const PaymentSuccess = () => {
     );
   }
 
-  /* ---------------- Success State ---------------- */
+  /* ---------------- Success ---------------- */
   return (
     <div className="min-h-[85vh] bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-sm border p-8 text-center">
@@ -132,7 +158,7 @@ const PaymentSuccess = () => {
         <div className="space-y-2 text-sm text-gray-700">
           <div className="flex justify-between">
             <span className="text-gray-500">Booking ID</span>
-            <span className="font-medium">{booking?.id}</span>
+            <span className="font-medium">{booking.id}</span>
           </div>
 
           <div className="flex justify-between">
@@ -142,6 +168,15 @@ const PaymentSuccess = () => {
               Confirmed
             </span>
           </div>
+
+          {booking.bookedSeats?.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Seats</span>
+              <span className="font-medium">
+                {booking.bookedSeats.join(", ")}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="mt-8 flex flex-col gap-3">

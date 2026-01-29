@@ -46,7 +46,10 @@ export const confirmBookingFromWebhook = async ({
         }, got ${amountReceived}`
       );
     }
-
+     await tx.seatLock.updateMany({
+    where: { bookingId, status: "LOCKED" },
+    data: { status: "BOOKED" },
+  });
     // ✅ CONFIRM BOOKING
     confirmedBooking = await tx.booking.update({
       where: { id: bookingId },
@@ -105,10 +108,7 @@ export const confirmBookingFromWebhook = async ({
       });
 
       // 4️⃣ Optional: release seat locks early
-      const lockKey = `lock:show:${confirmedBooking.showId}`;
-      if (confirmedBooking.bookedSeats?.length) {
-        await redis.hdel(lockKey, ...confirmedBooking.bookedSeats);
-      }
+    
 
       console.log("✅ Booking confirmed + email sent:", bookingId);
     } catch (err) {
