@@ -67,7 +67,7 @@ for (const seat of seats) {
 }
    // refresh TTL
   // 🔁 REFRESH LOCK TTL (important)
- 
+   await redis.expire(redisKey, LOCK_TTL_SECONDS);
  const ttlSeconds = await redis.ttl(redisKey);
   // 💰 Calculate amount server-side
   const amount = calcTotalFromLayout(
