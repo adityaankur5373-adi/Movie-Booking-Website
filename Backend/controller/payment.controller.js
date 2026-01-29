@@ -8,6 +8,7 @@ import { LOCK_TTL_SECONDS } from "../config/seatLock.config.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export const createPaymentIntent = asyncHandler(async (req, res) => {
+  const lockKey = (showId) => `lock:show:${showId}`;
   const userId = req.user.id;
   const { bookingId } = req.body;
 
