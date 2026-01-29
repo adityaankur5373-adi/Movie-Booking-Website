@@ -7,20 +7,7 @@ const lockKey = (showId) => `lock:show:${showId}`;
 // =====================================
 // ✅ Cache Versioning (Shows)
 // =====================================
-const SHOWS_CACHE_VERSION_KEY = "shows:cache:version";
 
-const getShowsCacheVersion = async () => {
-  const v = await redis.get(SHOWS_CACHE_VERSION_KEY);
-  if (!v) {
-    await redis.set(SHOWS_CACHE_VERSION_KEY, "1");
-    return "1";
-  }
-  return v;
-};
-
-const bumpShowsCacheVersion = async () => {
-  await redis.incr(SHOWS_CACHE_VERSION_KEY);
-};
 
 // =====================================
 // Cache Key Helpers
