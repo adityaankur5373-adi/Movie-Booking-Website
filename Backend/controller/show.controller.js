@@ -72,7 +72,6 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
 
   const now = new Date();
 
-  // ✅ grace-based auto removal
   const REMOVE_AFTER_MINUTES = 15;
   const removeAfter = new Date(
     now.getTime() - REMOVE_AFTER_MINUTES * 60 * 1000
@@ -82,7 +81,7 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     where: {
       movieId,
       startTime: {
-        gte: removeAfter, // 👈 keep visible after start
+        gte: removeAfter,
         lte: end,
       },
     },
@@ -108,14 +107,48 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  // ✅ add runtime flags
-  const showsWithStatus = shows.map((show) => ({
-    ...show,
-    hasStarted: now >= show.startTime,
-    isBookable: now < show.startTime, // booking closes at start
-  }));
+  // 🟢 BUILD screenList PER THEATRE
+  const theatreMap = {};
 
-  // ✅ cache FINAL response
+  for (const show of shows) {
+    const theatre = show.screen.theatre;
+    const theatreId = theatre.id;
+
+    if (!theatreMap[theatreId]) {
+      theatreMap[theatreId] = {
+        ...theatre,
+        screenList: [],
+      };
+    }
+
+    // add unique screens
+    if (
+      !theatreMap[theatreId].screenList.some(
+        (s) => s.id === show.screen.id
+      )
+    ) {
+      theatreMap[theatreId].screenList.push({
+        id: show.screen.id,
+        name: show.screen.name,
+      });
+    }
+  }
+
+  // 🟢 attach screenList + runtime flags
+  const showsWithStatus = shows.map((show) => {
+    const theatreId = show.screen.theatre.id;
+
+    return {
+      ...show,
+      screen: {
+        ...show.screen,
+        theatre: theatreMap[theatreId],
+      },
+      hasStarted: now >= show.startTime,
+      isBookable: now < show.startTime,
+    };
+  });
+
   await redis.set(
     cacheKey,
     JSON.stringify(showsWithStatus),
