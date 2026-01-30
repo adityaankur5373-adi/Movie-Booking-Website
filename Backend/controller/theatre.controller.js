@@ -90,7 +90,7 @@ export const getTheatreById = asyncHandler(async (req, res) => {
   }
 
   const theatre = await prisma.theatre.findUnique({
-    where: { theatreId },
+    where: { id: theatreId },
     select: {
       id: true,
       name: true,
@@ -152,7 +152,7 @@ export const createTheatre = asyncHandler(async (req, res) => {
 // ADMIN: add screen with layout JSON
 // =====================================
 export const addScreenToTheatre = asyncHandler(async (req, res) => {
-  const { theatreId } = req.params;
+  const  {theatreId}  = req.params;
   const { name, screenNo, layout } = req.body;
 
   if (!name?.trim() || screenNo === undefined || !layout) {
