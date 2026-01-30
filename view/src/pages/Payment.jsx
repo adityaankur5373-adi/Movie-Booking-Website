@@ -22,7 +22,7 @@ const Payment = () => {
   const [seats, setSeats] = useState([]);
   const [amount, setAmount] = useState(0);
   const [clientSecret, setClientSecret] = useState("");
-  const [timeLeft, setTimeLeft] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [paymentFailed, setPaymentFailed] = useState(false);
@@ -113,17 +113,24 @@ const Payment = () => {
   // -------------------------
   // Handle expiry
   // -------------------------
-  useEffect(() => {
-    if (timeLeft > 0 || expiredRef.current || !showId) return;
+ useEffect(() => {
+  if (
+    timeLeft === null ||      // ⬅️ wait until TTL is loaded
+    timeLeft > 0 ||
+    expiredRef.current ||
+    !showId
+  ) {
+    return;
+  }
 
-    expiredRef.current = true;
-    toast.error("Payment time expired");
+  expiredRef.current = true;
+  toast.error("Payment time expired");
 
-    navigate(`/shows/${showId}/seats`, {
-      replace: true,
-      state: { expired: true },
-    });
-  }, [timeLeft, showId, navigate]);
+  navigate(`/shows/${showId}/seats`, {
+    replace: true,
+    state: { expired: true },
+  });
+}, [timeLeft, showId, navigate]);
 
   // -------------------------
   // Pay now
