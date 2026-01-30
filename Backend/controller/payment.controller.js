@@ -25,16 +25,11 @@ export const createPayment = async (req, res) => {
     }
 
     // 🔒 ensure seat locks still valid
-    const lockedSeatsCount = await tx.seatLock.count({
-      where: {
-        bookingId,
-        status: "LOCKED",
-      },
-    });
+   // ❗ only block payment if booking itself expired
+if (booking.expiredAt < new Date()) {
+  throw new Error("Booking expired");
+}
 
-    if (lockedSeatsCount !== booking.bookedSeats.length) {
-      throw new Error("Seat lock expired");
-    }
 
     // 💰 CALCULATE PRICE IF NOT DONE
     let totalAmount = booking.totalAmount;
