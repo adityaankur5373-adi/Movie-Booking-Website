@@ -26,5 +26,5 @@ router.get("/me", protect, getMyBookings);
 
 // admin all bookings
 router.get("/all", protect, adminOnly, getAllBookings);
-router.get("/:id", protect, getBookingById);
+router.get("/:bookingId}", protect, getBookingById);
 export default router;

@@ -7,8 +7,8 @@ import { toast } from "react-hot-toast";
 import QRCode from "react-qr-code";
 import { dateFormat } from "../lib/dateFormat";
 
-const fetchBookingById = async (id) => {
-  const { data } = await api.get(`/bookings/${id}`);
+const fetchBookingById = async (bookingId) => {
+  const { data } = await api.get(`/bookings/${bookingId}`);
   if (!data?.success) throw new Error("Failed to load ticket");
   return data.booking;
 };

@@ -272,5 +272,4 @@ useEffect(() => {
     </div>
   );
 };
-
 export default SeatLayout;
