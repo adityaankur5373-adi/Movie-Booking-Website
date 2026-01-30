@@ -188,7 +188,8 @@ export const createShow = asyncHandler(async (req, res) => {
     throw new AppError("Movie runtime not found", 400);
   }
 
-  const start = new Date(`${startTime}+05:30`);
+  // ✅ FIXED (NO manual timezone)
+  const start = new Date(startTime);
   if (isNaN(start.getTime())) {
     throw new AppError("Invalid startTime", 400);
   }
