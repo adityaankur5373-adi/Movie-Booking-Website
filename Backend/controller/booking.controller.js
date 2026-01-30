@@ -264,14 +264,12 @@ export const createBooking = async (req, res, next) => {
       }
 
       // seat already locked in DB
-      if (
-        err instanceof prisma.prismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        return res.status(409).json({
-          message: "Seat already locked by another user",
-        });
-      }
+    if (err?.code === "P2002") {
+  return res.status(409).json({
+    message: "Seat already locked by another user",
+  });
+}
+
 
       throw err;
     }
