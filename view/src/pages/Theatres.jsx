@@ -6,7 +6,7 @@ import Loading from "../components/Loading";
 import { useQuery } from "@tanstack/react-query";
 
 const fetchTheatres = async () => {
-  const { data } = await api.get("/theatres");
+  const { data } = await api.get("/threater");
   if (!data?.success) return [];
   return data.theatres || [];
 };
