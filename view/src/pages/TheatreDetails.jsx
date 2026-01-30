@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 // ❌ REMOVED isPastShow — backend decides booking validity
 
 const fetchTheatre = async (theatreId) => {
-  const { data } = await api.get(`/theatres/${theatreId}`);
+  const { data } = await api.get(`/threater/${theatreId}`);
   if (!data?.success) throw new Error("Theatre not found");
   return data.theatre;
 };

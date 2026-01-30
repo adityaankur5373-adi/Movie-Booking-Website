@@ -12,7 +12,6 @@ const router = Router();
 
 router.get("/", getTheatres);
 router.get("/:theatreId", getTheatreById);
-
 router.post("/", protect, adminOnly, createTheatre);
 router.post("/:theatreId/screens", protect, adminOnly, addScreenToTheatre);
 
