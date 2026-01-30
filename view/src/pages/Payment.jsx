@@ -106,15 +106,21 @@ const Payment = () => {
   // -------------------------
   // Countdown timer
   // -------------------------
-  useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0) return;
+   useEffect(() => {
+  if (timeLeft === null) return;
 
-    const interval = setInterval(() => {
-      setTimeLeft((t) => t - 1000);
-    }, 1000);
+  const interval = setInterval(() => {
+    setTimeLeft((t) => {
+      if (t <= 1000) {
+        clearInterval(interval);
+        return 0;
+      }
+      return t - 1000;
+    });
+  }, 1000);
 
-    return () => clearInterval(interval);
-  }, [timeLeft]);
+  return () => clearInterval(interval);
+}, []); // ✅ EMPTY dependency
 
   // -------------------------
   // Handle expiry
