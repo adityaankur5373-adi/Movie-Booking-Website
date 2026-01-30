@@ -174,10 +174,12 @@ export const createShow = asyncHandler(async (req, res) => {
 
   const screen = await prisma.screen.findUnique({
     where: { id: screenId },
-    select: { id: true },
+    select: { id: true, theatreId: true },
   });
 
   if (!screen) throw new AppError("Screen not found", 404);
+  if (!screen.theatreId)
+    throw new AppError("Screen not linked to a theatre", 400);
 
   const movie = await prisma.movie.findUnique({
     where: { id: movieId },
@@ -188,7 +190,6 @@ export const createShow = asyncHandler(async (req, res) => {
     throw new AppError("Movie runtime not found", 400);
   }
 
-  // ✅ FIXED (NO manual timezone)
   const start = new Date(startTime);
   if (isNaN(start.getTime())) {
     throw new AppError("Invalid startTime", 400);
