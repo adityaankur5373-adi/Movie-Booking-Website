@@ -175,9 +175,7 @@ const MyBookings = () => {
 
     <button
       onClick={() => navigate(`/ticket/${item.id}`)}
-      className="mt-3 px-6 py-2 rounded-full 
-                 bg-green-600 hover:bg-green-700 
-                 transition font-semibold text-sm"
+      className="ransition font-semibold text-sm"
     >
       View Ticket
     </button>
