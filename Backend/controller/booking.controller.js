@@ -208,7 +208,7 @@ export const createBooking = async (req, res, next) => {
     // 2️⃣ LOCK TIME (8 minutes)
     const LOCK_TTL_SECONDS = 8 * 60;
     const expiresAt = new Date(Date.now() + LOCK_TTL_SECONDS * 1000);
-      await expireOldBookings(tx);
+      await expireOldBookings(prisma);
     // 3️⃣ REDIS LOCK (FAST CHECK)
     for (const seatId of seats) {
       const key = `seat_lock:${showId}:${seatId}`;
