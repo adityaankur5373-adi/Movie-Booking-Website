@@ -9,6 +9,7 @@ import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { ArrowLeft, Clock3 } from "lucide-react";
 
 const Payment = () => {
+
   const { bookingId } = useParams();
   const navigate = useNavigate();
 
@@ -30,6 +31,7 @@ const Payment = () => {
   const intentCreatedRef = useRef(false);
   const expiredRef = useRef(false);
   const confirmedRef = useRef(false);
+  const leavingRef = useRef(false);
 
   // -------------------------
   // Guard: invalid URL
@@ -115,6 +117,7 @@ const Payment = () => {
   // -------------------------
  useEffect(() => {
   if (
+    leavingRef.current || 
     timeLeft === null ||      // ⬅️ wait until TTL is loaded
     timeLeft > 0 ||
     expiredRef.current ||
@@ -210,13 +213,17 @@ const Payment = () => {
           </button>
 
           <div className="mt-4 flex justify-between text-sm">
-            <button
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-1 text-gray-600"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </button>
+           <button
+  onClick={() => {
+    leavingRef.current = true; // 👈 tell effects we're leaving
+    navigate(-1);
+  }}
+  className="flex items-center gap-1 text-gray-600"
+>
+  <ArrowLeft className="w-4 h-4" />
+  Back
+</button>
+
 
           </div>
         </div>
