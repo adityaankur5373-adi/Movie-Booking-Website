@@ -112,8 +112,11 @@ const MyBookings = () => {
                 {/* RIGHT */}
                 <div className="text-right text-white space-y-2">
                   <p className="text-2xl font-semibold">
-                    ₹{item.totalAmount || 0}
-                  </p>
+  {item.status === "PENDING" && item.totalAmount === 0
+    ? "—"
+    : `₹${item.totalAmount}`}
+</p>
+
 
                   <p className="text-sm text-gray-400">
                     Total Tickets: {item.bookedSeats.length}
