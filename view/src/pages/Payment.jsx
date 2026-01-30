@@ -28,6 +28,7 @@ const Payment = () => {
   const [pageLoading, setPageLoading] = useState(true);
   const [paymentFailed, setPaymentFailed] = useState(false);
  const [bookingLoaded, setBookingLoaded] = useState(false);
+  const ttlLoadedRef = useRef(false);
 
   const intentCreatedRef = useRef(false);
   const expiredRef = useRef(false);
@@ -66,6 +67,7 @@ const Payment = () => {
         // derive TTL from expiresAt
         setTimeLeft(Math.max(data.ttlSeconds * 1000, 0));
         setBookingLoaded(true);
+        ttlLoadedRef.current = true;
       } catch {
         toast.error("Booking expired");
         navigate("/my-bookings", { replace: true });
@@ -105,7 +107,7 @@ const Payment = () => {
   // Countdown timer
   // -------------------------
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (timeLeft === null || timeLeft <= 0) return;
 
     const interval = setInterval(() => {
       setTimeLeft((t) => t - 1000);
@@ -119,6 +121,7 @@ const Payment = () => {
   // -------------------------
  useEffect(() => {
   if (
+    !ttlLoadedRef.current||
     leavingRef.current || 
       !bookingLoaded ||
     timeLeft === null ||      // ⬅️ wait until TTL is loaded
@@ -176,8 +179,9 @@ const Payment = () => {
   // Cancel payment
   // -------------------------
   
-  const minutes = Math.floor(timeLeft / 60000);
-  const seconds = Math.floor((timeLeft % 60000) / 1000);
+  const safeTime = Math.max(timeLeft ?? 0, 0);
+const minutes = Math.floor(safeTime / 60000);
+const seconds = Math.floor((safeTime % 60000) / 1000);
 
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center px-4 py-10">
