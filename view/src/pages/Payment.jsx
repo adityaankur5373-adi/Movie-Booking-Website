@@ -66,7 +66,7 @@ const Payment = () => {
 
         // derive TTL from expiresAt
        // instead of ttlSeconds → timeLeft
-     const expiresAtMs = new Date(booking.expiresAt).getTime();
+     const expiresAtMs = new Date(booking.expiredAt).getTime();
 
 if (Number.isNaN(expiresAtMs)) {
   console.error("Invalid expiresAt:", booking.expiresAt);
