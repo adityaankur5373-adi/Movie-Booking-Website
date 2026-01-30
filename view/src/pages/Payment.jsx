@@ -62,9 +62,7 @@ const Payment = () => {
         setAmount(booking.totalAmount || 0);
 
         // derive TTL from expiresAt
-        const ttl =
-          new Date(booking.expiresAt).getTime() - Date.now();
-        setTimeLeft(Math.max(ttl, 0));
+        setTimeLeft(Math.max(data.ttlSeconds * 1000, 0));
       } catch {
         toast.error("Booking expired");
         navigate("/my-bookings", { replace: true });
