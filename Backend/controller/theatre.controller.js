@@ -75,10 +75,10 @@ export const getTheatres = asyncHandler(async (req, res) => {
 // NOTE: screenList can be heavy because layout JSON is big
 // =====================================
 export const getTheatreById = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  const { theatreId } = req.params;
 
   const version = await getTheatresCacheVersion();
-  const cacheKey = theatreDetailsKey(version, id);
+  const cacheKey = theatreDetailsKey(version, theatreId);
 
   const cached = await redis.get(cacheKey);
   if (cached) {
@@ -90,7 +90,7 @@ export const getTheatreById = asyncHandler(async (req, res) => {
   }
 
   const theatre = await prisma.theatre.findUnique({
-    where: { id },
+    where: { theatreId },
     select: {
       id: true,
       name: true,
