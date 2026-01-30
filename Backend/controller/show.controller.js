@@ -252,9 +252,11 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
   if (!theatreId) throw new AppError("theatreId is required", 400);
 
-  const now = new Date();
+  const now = new Date(); // UTC (correct)
 
+  // 🔹 IST day boundaries converted to UTC
   const IST_OFFSET = 330 * 60 * 1000;
+
   const istNow = new Date(now.getTime() + IST_OFFSET);
 
   const istStartOfDay = new Date(istNow);
@@ -263,8 +265,10 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const istEndOfDay = new Date(istNow);
   istEndOfDay.setHours(23, 59, 59, 999);
 
+  const utcStartOfDay = new Date(istStartOfDay.getTime() - IST_OFFSET);
   const utcEndOfDay = new Date(istEndOfDay.getTime() - IST_OFFSET);
 
+  // 🔹 Grace window (15 min)
   const GRACE_MINUTES = 15;
   const graceStart = new Date(now.getTime() - GRACE_MINUTES * 60 * 1000);
 
@@ -272,8 +276,8 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     where: {
       screen: { is: { theatreId } },
       startTime: {
-        gte: graceStart,
-        lte: utcEndOfDay,
+        gte: graceStart,      // allow grace
+        lte: utcEndOfDay,     // today only
       },
     },
     select: {
@@ -285,10 +289,6 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
           id: true,
           title: true,
           posterPath: true,
-          genres: { select: { id: true, name: true } },
-          voteAverage: true,
-          voteCount: true,
-          releaseDate: true,
           runtime: true,
         },
       },
@@ -296,18 +296,22 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
         select: {
           id: true,
           name: true,
-          layout: true,
         },
       },
     },
     orderBy: { startTime: "asc" },
   });
 
-  const showsWithStatus = shows.map((show) => ({
-    ...show,
-    hasStarted: now >= show.startTime,
-    isBookable: now < show.startTime,
-  }));
+  const showsWithStatus = shows.map((show) => {
+    const diffMinutes =
+      (show.startTime.getTime() - now.getTime()) / 60000;
+
+    return {
+      ...show,
+      hasStarted: diffMinutes <= 0,
+      isBookable: diffMinutes > -GRACE_MINUTES, // ✅ grace-aware
+    };
+  });
 
   res.json({
     success: true,
