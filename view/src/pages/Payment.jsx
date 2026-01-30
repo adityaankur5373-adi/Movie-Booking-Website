@@ -128,19 +128,20 @@ setExpiresAt(expiresAtMs);
   // -------------------------
   // Handle expiry
   // -------------------------
- useEffect(() => {
+useEffect(() => {
   if (
-    leavingRef.current ||
-    !expiresAt ||
-    timeLeft === null ||
-    timeLeft > 0 ||
-    expiredRef.current ||
+    leavingRef.current ||   // ✅ user is navigating away
+    !expiresAt ||           // ✅ expiry not loaded yet
+    timeLeft === null ||    // ✅ timer not ready
+    timeLeft > 0 ||         // ✅ still time left
+    expiredRef.current ||   // ✅ already handled
     !showId
   ) {
     return;
   }
 
   expiredRef.current = true;
+
   toast.error("Payment time expired");
 
   navigate(`/shows/${showId}/seats`, {
