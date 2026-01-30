@@ -61,7 +61,6 @@ const Payment = () => {
 
         setShowId(booking.showId);
         setSeats(booking.bookedSeats || []);
-        setAmount(booking.totalAmount || 0);
 
         // derive TTL from expiresAt
         setTimeLeft(Math.max(data.ttlSeconds * 1000, 0));
@@ -90,6 +89,7 @@ const Payment = () => {
           `/payments/${bookingId}/pay`
         );
         setClientSecret(data.clientSecret);
+        setAmount(data.amount);
       } catch {
         toast.error("Payment session expired");
         navigate("/my-bookings", { replace: true });
@@ -237,7 +237,7 @@ const Payment = () => {
 
           <div className="mt-4 flex justify-between text-sm">
             <span>Total</span>
-            <span className="font-semibold">₹{amount}</span>
+            <span className="font-semibold text-black">₹{amount}</span>
           </div>
 
           <div
