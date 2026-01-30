@@ -152,6 +152,7 @@ export const createTheatre = asyncHandler(async (req, res) => {
 // ADMIN: add screen with layout JSON
 // =====================================
 export const addScreenToTheatre = asyncHandler(async (req, res) => {
+    console.log("🔥 HIT getTheatreById", req.params);
   const  {theatreId}  = req.params;
   const { name, screenNo, layout } = req.body;
 
