@@ -7,7 +7,6 @@ import { useLogout } from "../hooks/useLogout";
 const Profile = () => {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-   console.log("USER:", user);
   const { mutate: logout, isPending } = useLogout();
 
   const [open, setOpen] = useState(false);

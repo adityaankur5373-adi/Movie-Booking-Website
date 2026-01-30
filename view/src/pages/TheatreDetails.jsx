@@ -12,14 +12,12 @@ import { useQuery } from "@tanstack/react-query";
 
 const fetchTheatre = async (theatreId) => {
   const { data } = await api.get(`/threater/${theatreId}`);
-  console.log("THEATRE API RAW:", data);
   if (!data?.success) throw new Error("Theatre not found");
   return data.theatre;
 };
 
 const fetchTheatreShows = async (theatreId) => {
   const { data } = await api.get(`/shows/theatre/${theatreId}`);
-   console.log("SHOWS API RAW:", data);
   if (!data?.success) return [];
   return data.shows || [];
 };
@@ -70,8 +68,6 @@ const TheatreDetails = () => {
 
       return acc;
     }, {});
-     console.log("theatreShows", theatreShows);
-console.log("moviesWithShows", moviesWithShows);
     return Object.keys(grouped).map((movieId) => ({
       movie: theatreShows.find((s) => s?.movie?.id === movieId)?.movie,
       shows: grouped[movieId].sort(
@@ -94,9 +90,22 @@ console.log("moviesWithShows", moviesWithShows);
 
   if (loading) return <Loading />;
 
-  if (theatreError || showsError || !theatre) {
-    return <Loading />;
-  }
+  if (theatreError) {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-gray-400">
+      Theatre not found
+    </div>
+  );
+}
+
+if (showsError) {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-gray-400">
+      Failed to load shows
+    </div>
+  );
+}
+
 
   return (
     <div className="relative my-40 mb-60 px-6 md:px-16 lg:px-40 xl:px-44 overflow-hidden min-h-[80vh]">

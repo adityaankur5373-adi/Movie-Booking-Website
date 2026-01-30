@@ -76,7 +76,9 @@ export const getTheatres = asyncHandler(async (req, res) => {
 // =====================================
 export const getTheatreById = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
-
+   if (!theatreId) {
+    throw new AppError("theatreId is required", 400);
+  }
   const version = await getTheatresCacheVersion();
   const cacheKey = theatreDetailsKey(version, theatreId);
 

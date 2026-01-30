@@ -5,5 +5,5 @@ const api = axios.create({
   withCredentials: true, // allows JWT cookies
   timeout: 30000
 });
-console.log("API URL:", import.meta.env.VITE_API_URL);
+
 export default api;
