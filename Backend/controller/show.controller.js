@@ -1,7 +1,7 @@
 import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
-
+import { expireOldBookings } from "../utils/expireOldBookings.js";
 
 // =====================================
 // GET /api/shows?movieId=xxx&date=YYYY-MM-DD
@@ -106,8 +106,10 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
 // GET /api/shows/:showId
 // =====================================
 export const getShowById = asyncHandler(async (req, res) => {
-  const { showId } = req.params;
+ 
 
+  const { showId } = req.params;
+     await expireOldBookings(prisma);
   const show = await prisma.show.findUnique({
     where: { id: showId },
     select: {

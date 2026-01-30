@@ -1,10 +1,8 @@
 import { prisma } from "../config/prisma.js";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import AppError from "../utils/AppError.js";
-
+import { expireOldBookings } from "../utils/expireOldBookings.js";
 import redis from "../config/redis.js";
-
-import { calcTotalFromLayout } from "../utils/calcTotal.js";
 
 // =====================================
 // Cache Versioning (Bookings)
@@ -210,7 +208,7 @@ export const createBooking = async (req, res, next) => {
     // 2️⃣ LOCK TIME (8 minutes)
     const LOCK_TTL_SECONDS = 8 * 60;
     const expiresAt = new Date(Date.now() + LOCK_TTL_SECONDS * 1000);
-
+      await expireOldBookings(tx);
     // 3️⃣ REDIS LOCK (FAST CHECK)
     for (const seatId of seats) {
       const key = `seat_lock:${showId}:${seatId}`;
@@ -295,7 +293,7 @@ export const createBooking = async (req, res, next) => {
 // =====================================
 export const getMyBookings = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-
+ await expireOldBookings(prisma);
   const version = await getBookingsCacheVersion();
   const cacheKey = myBookingsKey(version, userId);
 

@@ -12,12 +12,14 @@ import { useQuery } from "@tanstack/react-query";
 
 const fetchTheatre = async (theatreId) => {
   const { data } = await api.get(`/threater/${theatreId}`);
+  console.log("THEATRE API RAW:", data);
   if (!data?.success) throw new Error("Theatre not found");
   return data.theatre;
 };
 
 const fetchTheatreShows = async (theatreId) => {
   const { data } = await api.get(`/shows/theatre/${theatreId}`);
+   console.log("SHOWS API RAW:", data);
   if (!data?.success) return [];
   return data.shows || [];
 };

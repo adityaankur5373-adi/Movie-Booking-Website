@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { calcTotalFromLayout } from "../utils/calcTotal.js";
 import { prisma } from "../config/prisma.js";
+import { expireOldBookings } from "../utils/expireOldBookings.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export const createPayment = async (req, res) => {
@@ -8,6 +9,7 @@ export const createPayment = async (req, res) => {
 
   // 🔒 TRANSACTION = safe for retries
   const result = await prisma.$transaction(async (tx) => {
+    await expireOldBookings(tx);
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
       include: {

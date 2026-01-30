@@ -162,13 +162,28 @@ const MyBookings = () => {
                   )}
 
                   {/* 🟢 CONFIRMED */}
-                  {isConfirmed && (
-                    <span className="inline-block mt-3 px-4 py-1.5 
-                                     rounded-full text-xs font-medium 
-                                     bg-green-500/20 text-green-400">
-                      Confirmed
-                    </span>
-                  )}
+                 {/* 🟢 CONFIRMED */}
+{isConfirmed && (
+  <>
+    <span
+      className="inline-block mt-3 px-4 py-1.5 
+                 rounded-full text-xs font-medium 
+                 bg-green-500/20 text-green-400"
+    >
+      Confirmed
+    </span>
+
+    <button
+      onClick={() => navigate(`/ticket/${item.id}`)}
+      className="mt-3 px-6 py-2 rounded-full 
+                 bg-green-600 hover:bg-green-700 
+                 transition font-semibold text-sm"
+    >
+      View Ticket
+    </button>
+  </>
+)}
+
                 </div>
               </div>
             </div>
