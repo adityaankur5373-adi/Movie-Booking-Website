@@ -115,13 +115,13 @@ status: "CONFIRMED",
 // GET /api/bookings/:id
 // =====================================
 export const getBookingById = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  const { bookingId } = req.params;
   const userId = req.user.id;
 
-  if (!id) throw new AppError("Booking id is required", 400);
+  if (!bookingId ) throw new AppError("Booking id is required", 400);
 
   const version = await getBookingsCacheVersion();
-  const cacheKey = bookingDetailsKey(version, id);
+  const cacheKey = bookingDetailsKey(version, bookingId );
 
   const cached = await redis.get(cacheKey);
   if (cached) {
@@ -139,7 +139,7 @@ export const getBookingById = asyncHandler(async (req, res) => {
   }
 
   const booking = await prisma.booking.findUnique({
-    where: { id },
+    where: { id : bookingId },
     select: {
       id: true,
       userId: true,

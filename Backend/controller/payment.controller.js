@@ -1,7 +1,5 @@
 import Stripe from "stripe";
-import asyncHandler from "../middlewares/asyncHandler.js";
-import AppError from "../utils/AppError.js";
-import redis from "../config/redis.js";
+import { calcTotalFromLayout } from "../utils/calcTotal.js";
 import { prisma } from "../config/prisma.js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
