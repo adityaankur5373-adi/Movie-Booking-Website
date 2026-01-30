@@ -9,7 +9,7 @@ export const createPayment = async (req, res) => {
 
   // 🔒 TRANSACTION = safe for retries
   const result = await prisma.$transaction(async (tx) => {
-    await expireOldBookings(tx);
+  
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
       include: {
