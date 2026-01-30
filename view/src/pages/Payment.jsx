@@ -23,7 +23,8 @@ const Payment = () => {
   const [seats, setSeats] = useState([]);
   const [amount, setAmount] = useState(0);
   const [clientSecret, setClientSecret] = useState("");
-  const [timeLeft, setTimeLeft] = useState(null);
+const [expiresAt, setExpiresAt] = useState(null);
+const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [paymentFailed, setPaymentFailed] = useState(false);
@@ -65,7 +66,7 @@ const Payment = () => {
         setSeats(booking.bookedSeats || []);
 
         // derive TTL from expiresAt
-        setTimeLeft(Math.max(data.ttlSeconds * 1000, 0));
+       setExpiresAt(Date.now() + data.ttlSeconds * 1000);
         setBookingLoaded(true);
         ttlLoadedRef.current = true;
       } catch {
@@ -106,15 +107,16 @@ const Payment = () => {
   // -------------------------
   // Countdown timer
   // -------------------------
-  useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0) return;
+useEffect(() => {
+  if (!expiresAt) return;
 
-    const interval = setInterval(() => {
-      setTimeLeft((t) => t - 1000);
-    }, 1000);
+  const interval = setInterval(() => {
+    const remaining = expiresAt - Date.now();
+    setTimeLeft(Math.max(remaining, 0));
+  }, 1000);
 
-    return () => clearInterval(interval);
-  }, [timeLeft]);
+  return () => clearInterval(interval);
+}, [expiresAt]);
 
   // -------------------------
   // Handle expiry
