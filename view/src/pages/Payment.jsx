@@ -66,12 +66,15 @@ const Payment = () => {
 
         // derive TTL from expiresAt
        // instead of ttlSeconds → timeLeft
-     if (Number.isNaN(expiresAtMs)) {
+     const expiresAtMs = new Date(booking.expiresAt).getTime();
+
+if (Number.isNaN(expiresAtMs)) {
   console.error("Invalid expiresAt:", booking.expiresAt);
   return;
 }
-setExpiresAt(new Date(data.booking.expiresAt).getTime());
-        
+
+setExpiresAt(expiresAtMs);
+
       
       } catch {
         toast.error("Booking expired");
@@ -150,7 +153,7 @@ setExpiresAt(new Date(data.booking.expiresAt).getTime());
   // Pay now
   // -------------------------
   const handlePayNow = async () => {
-    if (!stripe || !elements || !clientSecret || ) return;
+    if (!stripe || !elements || !clientSecret || timeLeft <= 0) return;
 
     try {
       setLoading(true);
@@ -213,7 +216,7 @@ const seconds = Math.floor((safeTime % 60000) / 1000);
 
           <button
             onClick={handlePayNow}
-            disabled={loading || !clientSecret}
+           disabled={loading || !clientSecret || timeLeft <= 0}
             className={`mt-6 w-full py-3 rounded-xl text-white font-medium
               ${
                 timeLeft <= 0
