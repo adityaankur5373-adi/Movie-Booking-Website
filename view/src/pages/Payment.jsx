@@ -24,11 +24,11 @@ const Payment = () => {
   const [amount, setAmount] = useState(0);
   const [clientSecret, setClientSecret] = useState("");
   const [timeLeft, setTimeLeft] = useState(null);
+  const [expiresAt, setExpiresAt] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [paymentFailed, setPaymentFailed] = useState(false);
- const [bookingLoaded, setBookingLoaded] = useState(false);
-  const ttlLoadedRef = useRef(false);
+ 
 
   const intentCreatedRef = useRef(false);
   const expiredRef = useRef(false);
@@ -65,9 +65,10 @@ const Payment = () => {
         setSeats(booking.bookedSeats || []);
 
         // derive TTL from expiresAt
-        setTimeLeft(Math.max(data.ttlSeconds * 1000, 0));
-        setBookingLoaded(true);
-        ttlLoadedRef.current = true;
+       // instead of ttlSeconds → timeLeft
+setExpiresAt(new Date(data.booking.expiresAt).getTime());
+        
+      
       } catch {
         toast.error("Booking expired");
         navigate("/my-bookings", { replace: true });
@@ -107,24 +108,24 @@ const Payment = () => {
   // Countdown timer
   // -------------------------
   useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0) return;
+  if (!expiresAt) return;
 
-    const interval = setInterval(() => {
-      setTimeLeft((t) => t - 1000);
-    }, 1000);
+  const interval = setInterval(() => {
+    const remaining = expiresAt - Date.now();
+    setTimeLeft(Math.max(remaining, 0));
+  }, 1000);
 
-    return () => clearInterval(interval);
-  }, [timeLeft]);
+  return () => clearInterval(interval);
+}, [expiresAt]);
 
   // -------------------------
   // Handle expiry
   // -------------------------
  useEffect(() => {
   if (
-    !ttlLoadedRef.current||
-    leavingRef.current || 
-      !bookingLoaded ||
-    timeLeft === null ||      // ⬅️ wait until TTL is loaded
+    leavingRef.current ||
+    !expiresAt ||
+    timeLeft === null ||
     timeLeft > 0 ||
     expiredRef.current ||
     !showId
@@ -139,7 +140,7 @@ const Payment = () => {
     replace: true,
     state: { expired: true },
   });
-}, [timeLeft, showId, navigate]);
+}, [timeLeft, expiresAt, showId, navigate]);
 
   // -------------------------
   // Pay now
