@@ -50,20 +50,20 @@ const Payment = () => {
     const loadBooking = async () => {
       try {
         const { data } = await api.get(`/bookings/${bookingId}`);
-
-        if (data.status !== "PENDING") {
+          const booking = data.booking ?? data;
+        if (booking.status !== "PENDING") {
           toast.error("Booking not available");
           navigate("/my-bookings", { replace: true });
           return;
         }
 
-        setShowId(data.showId);
-        setSeats(data.bookedSeats || []);
-        setAmount(data.totalAmount || 0);
+        setShowId(booking.showId);
+        setSeats(booking.bookedSeats || []);
+        setAmount(booking.totalAmount || 0);
 
         // derive TTL from expiresAt
         const ttl =
-          new Date(data.expiresAt).getTime() - Date.now();
+          new Date(booking.expiresAt).getTime() - Date.now();
         setTimeLeft(Math.max(ttl, 0));
       } catch {
         toast.error("Booking expired");
