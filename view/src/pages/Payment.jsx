@@ -27,6 +27,7 @@ const Payment = () => {
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [paymentFailed, setPaymentFailed] = useState(false);
+ const [bookingLoaded, setBookingLoaded] = useState(false);
 
   const intentCreatedRef = useRef(false);
   const expiredRef = useRef(false);
@@ -64,6 +65,7 @@ const Payment = () => {
 
         // derive TTL from expiresAt
         setTimeLeft(Math.max(data.ttlSeconds * 1000, 0));
+        setBookingLoaded(true);
       } catch {
         toast.error("Booking expired");
         navigate("/my-bookings", { replace: true });
@@ -118,6 +120,7 @@ const Payment = () => {
  useEffect(() => {
   if (
     leavingRef.current || 
+      !bookingLoaded ||
     timeLeft === null ||      // ⬅️ wait until TTL is loaded
     timeLeft > 0 ||
     expiredRef.current ||
