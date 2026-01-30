@@ -243,7 +243,7 @@ const seconds = Math.floor((safeTime % 60000) / 1000);
           </p>
 
           <div className="mt-4 flex justify-between text-sm">
-            <span>Total</span>
+            <span className="font-semibold text-black">Total</span>
             <span className="font-semibold text-black">₹{amount}</span>
           </div>
 
