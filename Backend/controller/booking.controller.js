@@ -183,9 +183,10 @@ export const getBookingById = asyncHandler(async (req, res) => {
   if (booking.totalAmount > 0) {
     await redis.set(cacheKey, JSON.stringify(booking), "EX", 60);
   }
-  const ttlSeconds = Math.floor(
-  (booking.expiresAt.getTime() - Date.now()) / 1000
+ const ttlSeconds = Math.floor(
+  (booking.expiredAt.getTime() - Date.now()) / 1000
 );
+
   res.json({
     success: true,
     source: "db",
