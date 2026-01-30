@@ -33,7 +33,7 @@ const CreateScreen = () => {
     const fetchTheatres = async () => {
       try {
         setFetching(true);
-        const { data } = await api.get("/theatres");
+        const { data } = await api.get("/threater");
 
         if (data?.success) {
           setTheatres(data.theatres || []);
@@ -144,7 +144,7 @@ const CreateScreen = () => {
 
       // ✅ correct route (no :theatreId)
       const { data } = await api.post(
-        `/theatres/${form.theatreId}/screens`,
+        `/threater/${form.theatreId}/screens`,
         payload
       );
 

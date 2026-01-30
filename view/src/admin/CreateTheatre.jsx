@@ -56,7 +56,7 @@ const CreateTheatre = () => {
         address: form.address.trim(),
       };
 
-      const { data } = await api.post("/theatres", payload);
+      const { data } = await api.post("/threater", payload);
 
       if (data?.success) {
         toast.success("Theatre created successfully ✅");
