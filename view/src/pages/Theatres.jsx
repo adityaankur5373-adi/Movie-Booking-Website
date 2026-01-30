@@ -60,7 +60,7 @@ const Theatres = () => {
             </div>
 
             <button
-              onClick={() => navigate(`/threaters/${theatre.id}`)}
+              onClick={() => navigate(`/threater/${theatre.id}`)}
               className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2 text-sm bg-primary hover:bg-primary-dull transition rounded-md font-medium cursor-pointer active:scale-95"
             >
               View Shows <ArrowRightIcon className="w-4 h-4" strokeWidth={3} />
