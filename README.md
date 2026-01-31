@@ -123,49 +123,49 @@ Stripe
 
 ## 🏠 Home Page
 Browse trending and featured movies with modern UI.
-![Home](./screenshots/home.png)
+![Home](./home.png)
 
 ---
 
 ## 🎬 Movie Details Page
 View movie info, rating, trailer, and book tickets.
-![Movie Detail](./screenshots/moviedetailpage.png)
+![Movie Detail](./moviedetailpage.png)
 
 ---
 
 ## 🎥 Trailer Section
 Watch official trailers with embedded player.
-![Trailer Section](./screenshots/trailersection.png)
+![Trailer Section](./trailersection.png)
 
 ---
 
 ## 🏢 Theatres Listing
 Browse theatres city-wise with screens info.
-![Theatres](./screenshots/threaterpage.png)
+![Theatres](./threaterpage.png)
 
 ---
 
 ## 🕒 Theatre Shows & Time Selection
 Select theatre and available show timings.
-![Theatre Details](./screenshots/threaterdeatailpage.png)
+![Theatre Details](./threaterdeatailpage.png)
 
 ---
 
 ## 💺 Seat Selection Page
 Interactive seat layout with real-time locking & booking.
-![Seat Layout](./screenshots/seatlayoutpage.png)
+![Seat Layout](./seatlayoutpage.png)
 
 ---
 
 ## 💺 Admin Page
 Beautiful admin dashboard to see the show
-![Seat Layout](./screenshots/admindashboard.png)
+![Seat Layout](./admindashboard.png)
 
 ---
 
 ## 💺 Admin add show
 Admin can add show with threater screen and time
-![Seat Layout](./screenshots/addshow.png)
+![Seat Layout](./addshow.png)
 
 ---
 
