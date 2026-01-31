@@ -51,30 +51,26 @@ const TheatreDetails = () => {
   });
 
   // ✅ Group shows by movieId (FIXED)
-  const moviesWithShows = useMemo(() => {
-    const grouped = theatreShows.reduce((acc, show) => {
-      const movieId = show?.movie?.id;
-      if (!movieId) return acc;
+ const moviesWithShows = useMemo(() => {
+  const grouped = theatreShows.reduce((acc, show) => {
+    const movieId = show?.movie?.id;
+    if (!movieId) return acc;
 
-      if (!acc[movieId]) acc[movieId] = [];
+    if (!acc[movieId]) acc[movieId] = [];
 
-      acc[movieId].push({
-        showId: show.id,
-        screenId: show.screen?.id,
-        screenName: show.screen?.name,
-        time: show.startTime,
-        isBookable: show.isBookable, // ✅ backend truth
-      });
+    // ✅ send full backend object
+    acc[movieId].push(show);
 
-      return acc;
-    }, {});
-    return Object.keys(grouped).map((movieId) => ({
-      movie: theatreShows.find((s) => s?.movie?.id === movieId)?.movie,
-      shows: grouped[movieId].sort(
-        (a, b) => new Date(a.time) - new Date(b.time)
-      ),
-    }));
-  }, [theatreShows]);
+    return acc;
+  }, {});
+
+  return Object.keys(grouped).map((movieId) => ({
+    movie: theatreShows.find((s) => s?.movie?.id === movieId)?.movie,
+    shows: grouped[movieId].sort(
+      (a, b) => new Date(a.startTime) - new Date(b.startTime)
+    ),
+  }));
+}, [theatreShows]);
 
   const handleSelectShow = (showId, isBookable) => {
     if (!showId) return toast.error("Show not found");
