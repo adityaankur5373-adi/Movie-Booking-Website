@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import BlurCircle from "./BlurCircle";
 import ReactPlayer from "react-player";
 import { PlayCircleIcon } from "lucide-react";
@@ -28,16 +28,13 @@ const fetchFeaturedTrailers = async () => {
 
   if (!data?.success) return [];
 
-  const allTrailers =
-    (data.movies || []).flatMap((m) =>
-      (m.trailers || []).map((t) => ({
-        ...t,
-        movieTitle: m.title,
-        posterPath: m.posterPath,
-      }))
-    ) || [];
-
-  return allTrailers;
+  return (data.movies || []).flatMap((m) =>
+    (m.trailers || []).map((t) => ({
+      ...t,
+      movieTitle: m.title,
+      posterPath: m.posterPath,
+    }))
+  );
 };
 
 const TrailerSection = () => {
@@ -51,14 +48,15 @@ const TrailerSection = () => {
   } = useQuery({
     queryKey: ["featured-trailers", 4],
     queryFn: fetchFeaturedTrailers,
-    staleTime: 1000 * 60 * 10, // 10 min cache (fast UI)
-    retry: 1,
-    onSuccess: (data) => {
-      if (!currentTrailer && data?.length > 0) {
-        setCurrentTrailer(data[0]);
-      }
-    },
+    staleTime: 1000 * 60 * 10,
   });
+
+  // ✅ safer than onSuccess
+  useEffect(() => {
+    if (!currentTrailer && trailers.length > 0) {
+      setCurrentTrailer(trailers[0]);
+    }
+  }, [trailers]);
 
   const embedUrl = useMemo(
     () => toEmbedUrl(currentTrailer?.videoUrl),
@@ -74,27 +72,24 @@ const TrailerSection = () => {
       <div className="relative mt-6">
         <BlurCircle top="-100px" right="-100px" />
 
-        {/* Loading State */}
         {isLoading && (
           <div className="w-full max-w-3xl mx-auto h-[300px] flex items-center justify-center bg-gray-900 rounded-xl border border-gray-700 text-gray-400">
             Loading trailers...
           </div>
         )}
 
-        {/* Error State */}
         {isError && (
           <div className="w-full max-w-3xl mx-auto h-[300px] flex items-center justify-center bg-gray-900 rounded-xl border border-gray-700 text-red-400">
-            {error?.response?.data?.message || error?.message || "Something went wrong"}
+            {error?.message || "Something went wrong"}
           </div>
         )}
 
-        {/* Player */}
         {!isLoading && !isError && (
           <>
             {embedUrl ? (
               <ReactPlayer
-                src={embedUrl} // ✅ ReactPlayer uses "url" not "src"
-                controls={true}
+                url={embedUrl}   {/* ✅ FIXED */}
+                controls
                 className="mx-auto max-w-full"
                 width="960px"
                 height="540px"
@@ -119,7 +114,7 @@ const TrailerSection = () => {
         )}
       </div>
 
-      {/* Thumbnails */}
+      {/* thumbnails */}
       <div className="group grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 mt-8 max-w-3xl mx-auto">
         {trailers.map((t) => (
           <div
@@ -128,15 +123,12 @@ const TrailerSection = () => {
             onClick={() => setCurrentTrailer(t)}
           >
             <img
-              src={t.image}
+              url={t.image}
               alt="trailer"
               className="rounded-lg w-full h-40 md:h-44 object-cover brightness-75"
             />
 
-            <PlayCircleIcon
-              strokeWidth={1.6}
-              className="absolute inset-0 m-auto w-8 h-8 md:w-10 md:h-10 text-white"
-            />
+            <PlayCircleIcon className="absolute inset-0 m-auto w-8 h-8 md:w-10 md:h-10 text-white" />
           </div>
         ))}
       </div>
