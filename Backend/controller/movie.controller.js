@@ -453,6 +453,15 @@ export const getFeaturedMovies = asyncHandler(async (req, res) => {
     posterPath: true,
     voteAverage: true,
     genres: { select: { id: true, name: true } },
+    trailers: {
+  select: {
+    id: true,
+  image   : true,
+  videoUrl  : true,
+  youtubeKey :true,
+  }
+}
+
   },
   orderBy: { createdAt: "desc" },
 });
