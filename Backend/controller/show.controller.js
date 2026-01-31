@@ -6,6 +6,10 @@ import { expireOldBookings } from "../utils/expireOldBookings.js";
 // =====================================
 // GET /api/shows?movieId=xxx&date=YYYY-MM-DD
 // =====================================
+
+// =====================================
+// GET SHOWS BY MOVIE + DATE (NO CACHE)
+// =====================================
 export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   const { movieId, date } = req.query;
 
@@ -13,6 +17,9 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     throw new AppError("movieId and date are required", 400);
   }
 
+  // -----------------------------------
+  // Parse day boundaries
+  // -----------------------------------
   const start = new Date(`${date}T00:00:00`);
   const end = new Date(`${date}T23:59:59.999`);
 
@@ -21,22 +28,23 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   }
 
   const now = new Date();
-  const REMOVE_AFTER_MINUTES = 15;
-  const removeAfter = new Date(
-    now.getTime() - REMOVE_AFTER_MINUTES * 60 * 1000
-  );
+  const GRACE_MINUTES = 15;
 
+  // -----------------------------------
+  // Fetch all shows of the day
+  // -----------------------------------
   const shows = await prisma.show.findMany({
     where: {
       movieId,
       startTime: {
-        gte: removeAfter,
+        gte: start, // ✅ full day
         lte: end,
       },
     },
     select: {
       id: true,
       startTime: true,
+
       screen: {
         select: {
           id: true,
@@ -56,51 +64,67 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
+  // -----------------------------------
+  // Group screens under theatre
+  // -----------------------------------
   const theatreMap = {};
 
   for (const show of shows) {
-    const theatre = show.screen.theatre;
-    const theatreId = theatre.id;
+    const theatre = show.screen?.theatre;
+    if (!theatre) continue;
 
-    if (!theatreMap[theatreId]) {
-      theatreMap[theatreId] = {
+    if (!theatreMap[theatre.id]) {
+      theatreMap[theatre.id] = {
         ...theatre,
         screenList: [],
       };
     }
 
     if (
-      !theatreMap[theatreId].screenList.some(
+      !theatreMap[theatre.id].screenList.some(
         (s) => s.id === show.screen.id
       )
     ) {
-      theatreMap[theatreId].screenList.push({
+      theatreMap[theatre.id].screenList.push({
         id: show.screen.id,
         name: show.screen.name,
       });
     }
   }
 
+  // -----------------------------------
+  // Add status flags
+  // -----------------------------------
   const showsWithStatus = shows.map((show) => {
-    const theatreId = show.screen.theatre.id;
+    const diffMinutes =
+      (new Date(show.startTime).getTime() - now.getTime()) / 60000;
+
+    const theatreId = show.screen?.theatre?.id;
 
     return {
-      ...show,
+      id: show.id,
+      startTime: show.startTime,
+
       screen: {
         ...show.screen,
         theatre: theatreMap[theatreId],
       },
-      hasStarted: now >= show.startTime,
-      isBookable: now < show.startTime,
+
+      hasStarted: diffMinutes <= 0,
+      isBookable: diffMinutes > -GRACE_MINUTES,
     };
   });
 
+  // -----------------------------------
+  // Response
+  // -----------------------------------
   res.json({
     success: true,
     source: "db",
     shows: showsWithStatus,
   });
 });
+
 
 // =====================================
 // GET /api/shows/:showId
@@ -248,15 +272,23 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
 });
 
 // =====================================
-// GET /api/shows/theatre/:theatreId
+
+
+// =====================================
+// GET SHOWS BY THEATRE 
 // =====================================
 export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
-  if (!theatreId) throw new AppError("theatreId is required", 400);
 
-  const now = new Date(); // UTC (correct)
+  if (!theatreId) {
+    throw new AppError("theatreId is required", 400);
+  }
 
-  // 🔹 IST day boundaries converted to UTC
+  const now = new Date();
+
+  // -----------------------------------
+  // IST day boundaries → UTC
+  // -----------------------------------
   const IST_OFFSET = 330 * 60 * 1000;
 
   const istNow = new Date(now.getTime() + IST_OFFSET);
@@ -270,40 +302,47 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const utcStartOfDay = new Date(istStartOfDay.getTime() - IST_OFFSET);
   const utcEndOfDay = new Date(istEndOfDay.getTime() - IST_OFFSET);
 
-  // 🔹 Grace window (15 min)
+  // -----------------------------------
+  // Grace window (15 mins)
+  // -----------------------------------
   const GRACE_MINUTES = 15;
   const graceStart = new Date(now.getTime() - GRACE_MINUTES * 60 * 1000);
 
+  // -----------------------------------
+  // Fetch shows
+  // -----------------------------------
   const shows = await prisma.show.findMany({
     where: {
-       screen: {
-  theatreId: theatreId,
-},
+      screen: {
+        theatreId: theatreId, // direct FK filter (fast & safe)
+      },
       startTime: {
-        gte: graceStart,      // allow grace
-        lte: utcEndOfDay,     // today only
+        gte: graceStart,
+        lte: utcEndOfDay,
       },
     },
     select: {
       id: true,
       startTime: true,
       seatPrice: true,
+
       movie: {
         select: {
           id: true,
           title: true,
           posterPath: true,
           runtime: true,
-         voteAverage:true,
-         releaseDate :true,
-         genres: {
-      select: {
-        id: true,
-        name: true,
-      },
-    },
+          voteAverage: true,
+          releaseDate: true,
+          genres: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
       },
+
       screen: {
         select: {
           id: true,
@@ -314,23 +353,35 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
+  // -----------------------------------
+  // Add computed status (NO spread)
+  // -----------------------------------
   const showsWithStatus = shows.map((show) => {
     const diffMinutes =
-      (show.startTime.getTime() - now.getTime()) / 60000;
+      (new Date(show.startTime).getTime() - now.getTime()) / 60000;
 
     return {
-      ...show,
+      id: show.id,
+      startTime: show.startTime,
+      seatPrice: show.seatPrice,
+      movie: show.movie,
+      screen: show.screen,
+
       hasStarted: diffMinutes <= 0,
-      isBookable: diffMinutes > -GRACE_MINUTES, // ✅ grace-aware
+      isBookable: diffMinutes > -GRACE_MINUTES,
     };
   });
 
+  // -----------------------------------
+  // Response
+  // -----------------------------------
   res.json({
     success: true,
     source: "db",
     shows: showsWithStatus,
   });
 });
+
 
 // =====================================
 // ADMIN: GET ALL SHOWS
