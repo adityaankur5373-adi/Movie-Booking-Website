@@ -23,9 +23,9 @@ const Navbar = () => {
       <nav className="fixed top-0 left-0 z-50 w-full flex items-center justify-between px-6 md:px-16 lg:px-36 py-5 bg-transparent">
         {/* LOGO */}
         <Link to="/" className="flex items-center gap-2 flex-1 md:flex-none">
-  <Ticket className="w-7 h-7 text-primary" />
-  <span className="text-xl font-semibold">
-    TicketFlow
+  <Ticket className="w-10 h-10 text-primary" />
+  <span className="text-xl font-bold">
+    MovieShow
   </span>
 </Link>
 
