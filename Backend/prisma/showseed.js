@@ -2,66 +2,71 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const defaultLayout = {
-  sections: [
-    {
-      label: "GOLD",
-      price: 120,
-      rows: ["A", "B", "C"],
-      leftCount: 6,
-      rightCount: 6,
-    },
-    {
-      label: "SILVER",
-      price: 160,
-      rows: ["D", "E", "F", "G"],
-      leftCount: 8,
-      rightCount: 8,
-    },
-    {
-      label: "PLATINUM",
-      price: 220,
-      rows: ["H", "I", "J", "K"],
-      leftCount: 10,
-      rightCount: 10,
-    },
-  ],
-};
-
 async function main() {
-  console.log("🎬 Seeding screens...");
+  console.log("🎬 Seeding trailers only...");
 
-  const theatres = await prisma.theatre.findMany();
+  const trailerMap = [
+    {
+      title: "Kabir Singh",
+      trailer: {
+        image: "https://img.youtube.com/vi/RiANSSgCuJk/hqdefault.jpg",
+        youtubeKey: "RiANSSgCuJk",
+        videoUrl: "https://www.youtube.com/watch?v=RiANSSgCuJk",
+      },
+    },
+    {
+      title: "Green Book",
+      trailer: {
+        image: "https://img.youtube.com/vi/QkZxoko_HC0/hqdefault.jpg",
+        youtubeKey: "QkZxoko_HC0",
+        videoUrl: "https://www.youtube.com/watch?v=QkZxoko_HC0",
+      },
+    },
+    {
+      title: "Shershaah",
+      trailer: {
+        image: "https://img.youtube.com/vi/Q0FTXnefVBA/hqdefault.jpg",
+        youtubeKey: "Q0FTXnefVBA",
+        videoUrl: "https://www.youtube.com/watch?v=Q0FTXnefVBA",
+      },
+    },
+    {
+      title: "Drishyam",
+      trailer: {
+        image: "https://img.youtube.com/vi/AuuX2j14NBg/hqdefault.jpg",
+        youtubeKey: "AuuX2j14NBg",
+        videoUrl: "https://www.youtube.com/watch?v=AuuX2j14NBg",
+      },
+    },
+  ];
 
-  for (const theatre of theatres) {
-    // Create 2 screens per theatre
-    for (let i = 1; i <= 2; i++) {
-      await prisma.screen.upsert({
-        where: {
-          theatreId_screenNo: {
-            theatreId: theatre.id,
-            screenNo: i,
-          },
-        },
-        update: {},
-        create: {
-          name: `Audi ${i}`,
-          screenNo: i,
-          theatreId: theatre.id,
-          layout: defaultLayout,
-        },
-      });
+  for (const item of trailerMap) {
+    const movie = await prisma.movie.findFirst({
+      where: { title: item.title },
+    });
+
+    if (!movie) {
+      console.log(`❌ Movie not found: ${item.title}`);
+      continue;
     }
+
+    await prisma.trailer.create({
+      data: {
+        image: item.trailer.image,
+        videoUrl: item.trailer.videoUrl,
+        youtubeKey: item.trailer.youtubeKey,
+        movieId: movie.id,
+      },
+    });
+
+    console.log(`✅ Trailer added → ${item.title}`);
   }
 
-  console.log("✅ Screens seeded successfully!");
+  console.log("🎉 Trailer seed completed!");
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
+  .catch(console.error)
   .finally(async () => {
     await prisma.$disconnect();
   });

@@ -93,7 +93,7 @@ const TrailerSection = () => {
           <>
             {embedUrl ? (
               <ReactPlayer
-                url={embedUrl} // ✅ ReactPlayer uses "url" not "src"
+                src={embedUrl} // ✅ ReactPlayer uses "url" not "src"
                 controls={true}
                 className="mx-auto max-w-full"
                 width="960px"

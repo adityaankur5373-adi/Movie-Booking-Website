@@ -1,88 +1,72 @@
 import { PrismaClient } from "@prisma/client";
+
 const prisma = new PrismaClient();
 
 async function main() {
-  const movieId = "tt1187043"; // 👈 existing movie uuid in DB
+  console.log("🎬 Seeding trailers only...");
 
-  // 1) check movie exists
-  const movie = await prisma.movie.findUnique({ where: { id: movieId } });
-  if (!movie) throw new Error("Movie not found with given movieId");
-
-  // 2) create theatre (or reuse if already exists)
-  const theatre = await prisma.theatre.upsert({
-    where: { name: "PVR Cinemas Saket" },
-    update: {
-      city: "Delhi",
-      area: "Saket",
-      address: "Select Citywalk Mall, Saket, New Delhi",
-      screens: 1,
+  const trailerMap = [
+    {
+      title: "Kabir Singh",
+      trailer: {
+        image: "https://img.youtube.com/vi/RiANSSgCuJk/hqdefault.jpg",
+        youtubeKey: "RiANSSgCuJk",
+        videoUrl: "https://www.youtube.com/watch?v=RiANSSgCuJk",
+      },
     },
-    create: {
-      name: "PVR Cinemas Saket",
-      city: "Delhi",
-      area: "Saket",
-      address: "Select Citywalk Mall, Saket, New Delhi",
-      image:
-        "https://images.unsplash.com/photo-1517602302552-471fe67acf66?auto=format&fit=crop&w=1200&q=60",
-      screens: 1,
+    {
+      title: "Green Book",
+      trailer: {
+        image: "https://img.youtube.com/vi/QkZxoko_HC0/hqdefault.jpg",
+        youtubeKey: "QkZxoko_HC0",
+        videoUrl: "https://www.youtube.com/watch?v=QkZxoko_HC0",
+      },
     },
-  });
-
-  // 3) create screen layout
-  const layout = {
-    rows: [
-      { row: "A", type: "SILVER", seats: ["A1", "A2", "A3", "A4", "A5"] },
-      { row: "B", type: "SILVER", seats: ["B1", "B2", "B3", "B4", "B5"] },
-      { row: "C", type: "GOLD", seats: ["C1", "C2", "C3", "C4", "C5"] },
-      { row: "D", type: "GOLD", seats: ["D1", "D2", "D3", "D4", "D5"] },
-      { row: "E", type: "PLATINUM", seats: ["E1", "E2", "E3", "E4", "E5"] },
-    ],
-  };
-
-  // ⚠️ this will create new screen every seed run (duplicate)
-  // If you want safe upsert, tell me and I’ll make it.
-  const screen = await prisma.screen.create({
-    data: {
-      name: "Audi 1",
-      screenNo: 1,
-      layout,
-      theatreId: theatre.id,
+    {
+      title: "Shershaah",
+      trailer: {
+        image: "https://img.youtube.com/vi/Q0FTXnefVBA/hqdefault.jpg",
+        youtubeKey: "Q0FTXnefVBA",
+        videoUrl: "https://www.youtube.com/watch?v=Q0FTXnefVBA",
+      },
     },
-  });
-
-  // 4) create shows (same movieId, different times)
-  const showTimes = [
-    "2026-01-21T10:00:00.000Z",
-    "2026-01-21T14:00:00.000Z",
-    "2026-01-21T18:00:00.000Z",
+    {
+      title: "Drishyam",
+      trailer: {
+        image: "https://img.youtube.com/vi/AuuX2j14NBg/hqdefault.jpg",
+        youtubeKey: "AuuX2j14NBg",
+        videoUrl: "https://www.youtube.com/watch?v=AuuX2j14NBg",
+      },
+    },
   ];
 
-  for (const time of showTimes) {
-    await prisma.show.create({
-      data: {
-        movieId,
-        theatreId: theatre.id,
-        screenId: screen.id,
-        startTime: new Date(time),
+  for (const item of trailerMap) {
+    const movie = await prisma.movie.findFirst({
+      where: { title: item.title },
+    });
 
-        seatPrice: 250,
-        seatPrices: {
-          SILVER: 200,
-          GOLD: 300,
-          PLATINUM: 400,
-        },
+    if (!movie) {
+      console.log(`❌ Movie not found: ${item.title}`);
+      continue;
+    }
+
+    await prisma.trailer.create({
+      data: {
+        image: item.trailer.image,
+        videoUrl: item.trailer.videoUrl,
+        youtubeKey: item.trailer.youtubeKey,
+        movieId: movie.id,
       },
     });
+
+    console.log(`✅ Trailer added → ${item.title}`);
   }
 
-  console.log("✅ Theatre + Screen + Shows seeded successfully!");
+  console.log("🎉 Trailer seed completed!");
 }
 
 main()
-  .catch((e) => {
-    console.error("❌ Seed error:", e);
-    process.exit(1);
-  })
+  .catch(console.error)
   .finally(async () => {
     await prisma.$disconnect();
   });
