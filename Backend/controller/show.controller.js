@@ -17,27 +17,33 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     throw new AppError("movieId and date are required", 400);
   }
 
-  // -----------------------------------
-  // Parse day boundaries
-  // -----------------------------------
-  const start = new Date(`${date}T00:00:00`);
-  const end = new Date(`${date}T23:59:59.999`);
-
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    throw new AppError("Invalid date format. Use YYYY-MM-DD", 400);
-  }
-
   const now = new Date();
   const GRACE_MINUTES = 15;
 
   // -----------------------------------
-  // Fetch all shows of the day
+  // 🔥 IST → UTC conversion (IMPORTANT)
+  // -----------------------------------
+  const IST_OFFSET = 330 * 60 * 1000;
+
+  const istDate = new Date(date + "T00:00:00");
+
+  const istStart = new Date(istDate);
+  istStart.setHours(0, 0, 0, 0);
+
+  const istEnd = new Date(istDate);
+  istEnd.setHours(23, 59, 59, 999);
+
+  const start = new Date(istStart.getTime() - IST_OFFSET);
+  const end = new Date(istEnd.getTime() - IST_OFFSET);
+
+  // -----------------------------------
+  // Fetch shows
   // -----------------------------------
   const shows = await prisma.show.findMany({
     where: {
       movieId,
       startTime: {
-        gte: start, // ✅ full day
+        gte: start,
         lte: end,
       },
     },
@@ -93,7 +99,7 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   }
 
   // -----------------------------------
-  // Add status flags
+  // Status flags
   // -----------------------------------
   const showsWithStatus = shows.map((show) => {
     const diffMinutes =
@@ -104,27 +110,21 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     return {
       id: show.id,
       startTime: show.startTime,
-
       screen: {
         ...show.screen,
         theatre: theatreMap[theatreId],
       },
-
       hasStarted: diffMinutes <= 0,
       isBookable: diffMinutes > -GRACE_MINUTES,
     };
   });
 
-  // -----------------------------------
-  // Response
-  // -----------------------------------
   res.json({
     success: true,
     source: "db",
     shows: showsWithStatus,
   });
 });
-
 
 // =====================================
 // GET /api/shows/:showId
