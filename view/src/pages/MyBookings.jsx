@@ -92,7 +92,7 @@ const MyBookings = () => {
                     </p>
 
                     <p className="text-sm text-gray-400 mt-2">
-                      {new Date(show.startTime).toLocaleString()}
+                      {dateFormat(show.startTime)}
                     </p>
 
                     <div className="mt-3 space-y-1 text-sm text-gray-300">
