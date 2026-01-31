@@ -194,9 +194,22 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
 
   const now = new Date();
 
+  // ✅ today only filter
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const GRACE_MINUTES = 15;
+
   const shows = await prisma.show.findMany({
     where: {
-      screen: { theatreId }, // ← no time filtering here
+      screen: { theatreId },
+      startTime: {
+        gte: start,
+        lte: end,
+      },
     },
     select: {
       id: true,
@@ -221,14 +234,26 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  const showsWithStatus = shows.map((show) => ({
-    ...show,
-    hasStarted: now >= show.startTime,
-    isBookable: now < show.startTime, // ⭐ simple & correct
-  }));
+  const showsWithStatus = shows.map((show) => {
+    const diff = show.startTime.getTime() - now.getTime();
+
+    const isStarted = now >= show.startTime;
+
+    const isBookable = diff > -GRACE_MINUTES * 60000;
+
+    const isEnded = diff <= -GRACE_MINUTES * 60000;
+
+    return {
+      ...show,
+      isStarted,
+      isBookable,
+      isEnded,
+    };
+  });
 
   res.json({ success: true, shows: showsWithStatus });
 });
+
 
 
 // =====================================
