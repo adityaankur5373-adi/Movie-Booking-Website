@@ -337,6 +337,7 @@ export const getMyBookings = asyncHandler(async (req, res) => {
               id: true,
               title: true,
               posterPath: true,
+              runtime: true,
             },
           },
           screen: {
