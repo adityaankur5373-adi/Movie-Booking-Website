@@ -159,7 +159,7 @@ Interactive seat layout with real-time locking & booking.
 
 ## 💺 Admin Page
 Beautiful admin dashboard to see the show
-![Admin dashboard](./Admindashboard.png)
+![Admin dashboard](./Admindasboard.png)
 
 ---
 
