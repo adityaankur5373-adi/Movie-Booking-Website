@@ -55,7 +55,7 @@ const TheatreMovieCard = ({ movie, shows = [], onSelectShow }) => {
           const past = s?.isPast === true;
 
           return (
-          <button
+        <button
   key={s.id}
   disabled={!s.isBookable}
   onClick={() => s.isBookable && onSelectShow?.(s.id, s.startTime)}
@@ -69,8 +69,11 @@ const TheatreMovieCard = ({ movie, shows = [], onSelectShow }) => {
 >
   <ClockIcon className="w-4 h-4" />
   {isoTimeFormat(s.startTime)}
-  <span className="text-xs opacity-70">({s.screen.name})</span>
+  <span className="text-xs opacity-70">
+    ({s?.screen?.name || "Screen"})
+  </span>
 </button>
+
           );
         })}
       </div>
