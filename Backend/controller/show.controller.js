@@ -276,7 +276,9 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
 
   const shows = await prisma.show.findMany({
     where: {
-      screen: { is: { theatreId } },
+       screen: {
+  theatreId: theatreId,
+},
       startTime: {
         gte: graceStart,      // allow grace
         lte: utcEndOfDay,     // today only
