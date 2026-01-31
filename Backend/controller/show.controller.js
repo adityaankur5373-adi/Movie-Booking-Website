@@ -214,21 +214,30 @@ export const createShow = asyncHandler(async (req, res) => {
     throw new AppError("Movie runtime not found", 400);
   }
 
-  const start = new Date(startTime);
-  if (isNaN(start.getTime())) {
+  // -----------------------------------
+  // 🔥 IST → UTC conversion (IMPORTANT)
+  // -----------------------------------
+  const IST_OFFSET = 330 * 60 * 1000;
+
+  const istStart = new Date(startTime);
+
+  if (isNaN(istStart.getTime())) {
     throw new AppError("Invalid startTime", 400);
   }
 
-  const endTime = new Date(
-    start.getTime() + movie.runtime * 60 * 1000
+  // convert IST time → UTC
+  const startUTC = new Date(istStart.getTime() - IST_OFFSET);
+
+  const endTimeUTC = new Date(
+    startUTC.getTime() + movie.runtime * 60 * 1000
   );
 
   const show = await prisma.show.create({
     data: {
       movieId,
       screenId,
-      startTime: start,
-      endTime,
+      startTime: startUTC,
+      endTime: endTimeUTC,
       seatPrice,
     },
   });
@@ -238,6 +247,7 @@ export const createShow = asyncHandler(async (req, res) => {
     show,
   });
 });
+
 
 // =====================================
 // GET /api/shows/movie/:movieId
