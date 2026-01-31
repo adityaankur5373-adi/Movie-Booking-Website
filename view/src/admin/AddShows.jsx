@@ -137,13 +137,13 @@ const AddShows = () => {
 
     try {
       setSubmitting(true);
+const startTimes = [];
+for (const date of Object.keys(dateTimeSelection)) {
+  for (const time of dateTimeSelection[date]) {
+    startTimes.push(new Date(`${date}T${time}`).toISOString());
+  }
+}
 
-      const startTimes = [];
-      for (const date of Object.keys(dateTimeSelection)) {
-        for (const time of dateTimeSelection[date]) {
-          startTimes.push(`${date}T${time}`);
-        }
-      }
 
       const requests = startTimes.map((startTime) =>
         api.post("/shows", {

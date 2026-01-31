@@ -13,117 +13,42 @@ import { expireOldBookings } from "../utils/expireOldBookings.js";
 export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   const { movieId, date } = req.query;
 
-  if (!movieId || !date) {
-    throw new AppError("movieId and date are required", 400);
-  }
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
 
   const now = new Date();
   const GRACE_MINUTES = 15;
 
-  // -----------------------------------
-  // 🔥 IST → UTC conversion (IMPORTANT)
-  // -----------------------------------
-  const IST_OFFSET = 330 * 60 * 1000;
-
-  const istDate = new Date(date + "T00:00:00");
-
-  const istStart = new Date(istDate);
-  istStart.setHours(0, 0, 0, 0);
-
-  const istEnd = new Date(istDate);
-  istEnd.setHours(23, 59, 59, 999);
-
-  const start = new Date(istStart.getTime() - IST_OFFSET);
-  const end = new Date(istEnd.getTime() - IST_OFFSET);
-
-  // -----------------------------------
-  // Fetch shows
-  // -----------------------------------
   const shows = await prisma.show.findMany({
     where: {
       movieId,
-      startTime: {
-        gte: start,
-        lte: end,
-      },
+      startTime: { gte: start, lte: end },
     },
     select: {
       id: true,
       startTime: true,
-
       screen: {
         select: {
           id: true,
           name: true,
-          theatre: {
-            select: {
-              id: true,
-              name: true,
-              area: true,
-              city: true,
-              address: true,
-            },
-          },
+          theatre: true,
         },
       },
     },
     orderBy: { startTime: "asc" },
   });
 
-  // -----------------------------------
-  // Group screens under theatre
-  // -----------------------------------
-  const theatreMap = {};
+  const showsWithStatus = shows.map((s) => ({
+    ...s,
+    hasStarted: now >= s.startTime,
+    isBookable:
+      s.startTime.getTime() - now.getTime() > -GRACE_MINUTES * 60000,
+  }));
 
-  for (const show of shows) {
-    const theatre = show.screen?.theatre;
-    if (!theatre) continue;
-
-    if (!theatreMap[theatre.id]) {
-      theatreMap[theatre.id] = {
-        ...theatre,
-        screenList: [],
-      };
-    }
-
-    if (
-      !theatreMap[theatre.id].screenList.some(
-        (s) => s.id === show.screen.id
-      )
-    ) {
-      theatreMap[theatre.id].screenList.push({
-        id: show.screen.id,
-        name: show.screen.name,
-      });
-    }
-  }
-
-  // -----------------------------------
-  // Status flags
-  // -----------------------------------
-  const showsWithStatus = shows.map((show) => {
-    const diffMinutes =
-      (new Date(show.startTime).getTime() - now.getTime()) / 60000;
-
-    const theatreId = show.screen?.theatre?.id;
-
-    return {
-      id: show.id,
-      startTime: show.startTime,
-      screen: {
-        ...show.screen,
-        theatre: theatreMap[theatreId],
-      },
-      hasStarted: diffMinutes <= 0,
-      isBookable: diffMinutes > -GRACE_MINUTES,
-    };
-  });
-
-  res.json({
-    success: true,
-    source: "db",
-    shows: showsWithStatus,
-  });
+  res.json({ success: true, shows: showsWithStatus });
 });
 
 // =====================================
@@ -190,63 +115,40 @@ export const createShow = asyncHandler(async (req, res) => {
   const { movieId, screenId, startTime, seatPrice } = req.body;
 
   if (!movieId || !screenId || !startTime || seatPrice === undefined) {
-    throw new AppError(
-      "movieId, screenId, startTime, seatPrice are required",
-      400
-    );
+    throw new AppError("movieId, screenId, startTime, seatPrice are required", 400);
   }
 
   const screen = await prisma.screen.findUnique({
     where: { id: screenId },
-    select: { id: true, theatreId: true },
+    select: { theatreId: true },
   });
 
   if (!screen) throw new AppError("Screen not found", 404);
-  if (!screen.theatreId)
-    throw new AppError("Screen not linked to a theatre", 400);
 
   const movie = await prisma.movie.findUnique({
     where: { id: movieId },
     select: { runtime: true },
   });
 
-  if (!movie || !movie.runtime) {
-    throw new AppError("Movie runtime not found", 400);
-  }
+  const start = new Date(startTime); // already UTC ISO from frontend
 
-  // -----------------------------------
-  // 🔥 IST → UTC conversion (IMPORTANT)
-  // -----------------------------------
-  const IST_OFFSET = 330 * 60 * 1000;
+  if (isNaN(start)) throw new AppError("Invalid startTime", 400);
 
-  const istStart = new Date(startTime);
-
-  if (isNaN(istStart.getTime())) {
-    throw new AppError("Invalid startTime", 400);
-  }
-
-  // convert IST time → UTC
-  const startUTC = new Date(istStart.getTime() - IST_OFFSET);
-
-  const endTimeUTC = new Date(
-    startUTC.getTime() + movie.runtime * 60 * 1000
-  );
+  const endTime = new Date(start.getTime() + movie.runtime * 60000);
 
   const show = await prisma.show.create({
     data: {
       movieId,
       screenId,
-      startTime: startUTC,
-      endTime: endTimeUTC,
+      startTime: start,
+      endTime,
       seatPrice,
     },
   });
 
-  res.status(201).json({
-    success: true,
-    show,
-  });
+  res.status(201).json({ success: true, show });
 });
+
 
 
 // =====================================
@@ -290,60 +192,17 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
 export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
 
-  if (!theatreId) {
-    throw new AppError("theatreId is required", 400);
-  }
-
   const now = new Date();
-
-  // -----------------------------------
-  // IST day boundaries → UTC
-  // -----------------------------------
-  // IST offset
-const IST_OFFSET = 330 * 60 * 1000;
-
-// Create IST date first
-const istDate = new Date(date + "T00:00:00");
-
-// IST day boundaries
-const istStart = new Date(istDate);
-istStart.setHours(0, 0, 0, 0);
-
-const istEnd = new Date(istDate);
-istEnd.setHours(23, 59, 59, 999);
-
-// Convert to UTC for DB query
-const start = new Date(istStart.getTime() - IST_OFFSET);
-const end = new Date(istEnd.getTime() - IST_OFFSET);
-
-
-  const utcStartOfDay = new Date(istStartOfDay.getTime() - IST_OFFSET);
-  const utcEndOfDay = new Date(istEndOfDay.getTime() - IST_OFFSET);
-
-  // -----------------------------------
-  // Grace window (15 mins)
-  // -----------------------------------
   const GRACE_MINUTES = 15;
-  const graceStart = new Date(now.getTime() - GRACE_MINUTES * 60 * 1000);
 
-  // -----------------------------------
-  // Fetch shows
-  // -----------------------------------
   const shows = await prisma.show.findMany({
     where: {
-      screen: {
-        theatreId: theatreId, // direct FK filter (fast & safe)
-      },
-      startTime: {
-        gte: graceStart,
-        lte: utcEndOfDay,
-      },
+      screen: { theatreId },
+      startTime: { gte: now },
     },
     select: {
       id: true,
       startTime: true,
-      seatPrice: true,
-
       movie: {
         select: {
           id: true,
@@ -360,45 +219,21 @@ const end = new Date(istEnd.getTime() - IST_OFFSET);
           },
         },
       },
-
-      screen: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
+      screen: { select: { id: true, name: true } },
     },
     orderBy: { startTime: "asc" },
   });
 
-  // -----------------------------------
-  // Add computed status (NO spread)
-  // -----------------------------------
-  const showsWithStatus = shows.map((show) => {
-    const diffMinutes =
-      (new Date(show.startTime).getTime() - now.getTime()) / 60000;
+  const showsWithStatus = shows.map((show) => ({
+    ...show,
+    hasStarted: now >= show.startTime,
+    isBookable:
+      show.startTime.getTime() - now.getTime() > -GRACE_MINUTES * 60000,
+  }));
 
-    return {
-      id: show.id,
-      startTime: show.startTime,
-      seatPrice: show.seatPrice,
-      movie: show.movie,
-      screen: show.screen,
-
-      hasStarted: diffMinutes <= 0,
-      isBookable: diffMinutes > -GRACE_MINUTES,
-    };
-  });
-
-  // -----------------------------------
-  // Response
-  // -----------------------------------
-  res.json({
-    success: true,
-    source: "db",
-    shows: showsWithStatus,
-  });
+  res.json({ success: true, shows: showsWithStatus });
 });
+
 
 
 // =====================================
