@@ -5,6 +5,8 @@ import { assets } from "../assets/assets";
 import Profile from "./Profile.jsx";
 import AuthModal from "./AuthModal.jsx";
 import useAuthStore from "../store/useAuthStore";
+import { Ticket } from "lucide-react";
+
 
 const Navbar = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -20,9 +22,12 @@ const Navbar = () => {
     <>
       <nav className="fixed top-0 left-0 z-50 w-full flex items-center justify-between px-6 md:px-16 lg:px-36 py-5 bg-transparent">
         {/* LOGO */}
-        <Link to="/" className="flex-1 md:flex-none">
-          <img src={assets.logo} alt="logo" className="w-36 h-auto" />
-        </Link>
+        <Link to="/" className="flex items-center gap-2 flex-1 md:flex-none">
+  <Ticket className="w-7 h-7 text-primary" />
+  <span className="text-xl font-semibold">
+    TicketFlow
+  </span>
+</Link>
 
         {/* MENU */}
         <div
