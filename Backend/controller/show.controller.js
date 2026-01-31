@@ -193,12 +193,10 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
 
   const now = new Date();
-  const GRACE_MINUTES = 15;
 
   const shows = await prisma.show.findMany({
     where: {
-      screen: { theatreId },
-      startTime: { gte: now },
+      screen: { theatreId }, // ← no time filtering here
     },
     select: {
       id: true,
@@ -212,14 +210,13 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
           voteAverage: true,
           releaseDate: true,
           genres: {
-            select: {
-              id: true,
-              name: true,
-            },
+            select: { id: true, name: true },
           },
         },
       },
-      screen: { select: { id: true, name: true } },
+      screen: {
+        select: { id: true, name: true },
+      },
     },
     orderBy: { startTime: "asc" },
   });
@@ -227,13 +224,11 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const showsWithStatus = shows.map((show) => ({
     ...show,
     hasStarted: now >= show.startTime,
-    isBookable:
-      show.startTime.getTime() - now.getTime() > -GRACE_MINUTES * 60000,
+    isBookable: now < show.startTime, // ⭐ simple & correct
   }));
 
   res.json({ success: true, shows: showsWithStatus });
 });
-
 
 
 // =====================================
