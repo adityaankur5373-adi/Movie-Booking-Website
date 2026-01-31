@@ -325,23 +325,27 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
 // =====================================
 // ADMIN: GET ALL SHOWS
 // =====================================
+// =====================================
+// SHOW STATUS HELPER
+// =====================================
 const getShowStatus = (now, startTime, endTime) => {
   if (now < startTime) return "UPCOMING";
   if (now >= startTime && now <= endTime) return "RUNNING";
   return "ENDED";
 };
 
-const getTotalSeatsFromLayout = (layout) => {
-  if (!layout?.rows) return 0;
-  return layout.rows.reduce((sum, row) => sum + row.seats.length, 0);
-};
-
+// =====================================
+// ADMIN: GET ALL SHOWS (SAFE VERSION)
+// =====================================
 export const getAllShowsAdmin = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const cursor = req.query.cursor || null;
 
   const now = new Date();
 
+  // -----------------------------
+  // Fetch shows (NO layout logic)
+  // -----------------------------
   const shows = await prisma.show.findMany({
     take: limit + 1,
     ...(cursor && {
@@ -363,7 +367,6 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
         select: {
           id: true,
           name: true,
-          layout: true,
           theatre: {
             select: {
               id: true,
@@ -374,9 +377,6 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
           },
         },
       },
-      _count: {
-        select: { bookings: true },
-      },
     },
     orderBy: [{ startTime: "desc" }, { id: "desc" }],
   });
@@ -386,6 +386,9 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
 
   const showIds = data.map((s) => s.id);
 
+  // -----------------------------
+  // Earnings + tickets sold
+  // -----------------------------
   const earningsAgg = await prisma.booking.groupBy({
     by: ["showId"],
     where: {
@@ -396,7 +399,7 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
       totalAmount: true,
     },
     _count: {
-      id: true,
+      id: true, // booking count
     },
   });
 
@@ -410,13 +413,16 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
     ])
   );
 
+  // -----------------------------
+  // Format response
+  // -----------------------------
   const formatted = data.map((s) => {
     const runtime = s.movie?.runtime || 0;
+
     const endTime = new Date(
       s.startTime.getTime() + runtime * 60 * 1000
     );
 
-    const totalSeats = getTotalSeatsFromLayout(s.screen?.layout);
     const sold = earningsMap.get(s.id)?.ticketsSold || 0;
 
     return {
@@ -432,9 +438,7 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
         name: s.screen.name,
       },
       stats: {
-        totalSeats,
         ticketsSold: sold,
-        availableSeats: Math.max(totalSeats - sold, 0),
       },
       earnings: {
         amount: earningsMap.get(s.id)?.earnings || 0,
@@ -444,6 +448,9 @@ export const getAllShowsAdmin = asyncHandler(async (req, res) => {
     };
   });
 
+  // -----------------------------
+  // Response
+  // -----------------------------
   res.json({
     success: true,
     source: "db",
