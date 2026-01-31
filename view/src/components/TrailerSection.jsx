@@ -123,7 +123,7 @@ const TrailerSection = () => {
             onClick={() => setCurrentTrailer(t)}
           >
             <img
-              url={t.image}
+              src={t.image}
               alt="trailer"
               className="rounded-lg w-full h-40 md:h-44 object-cover brightness-75"
             />
