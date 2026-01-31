@@ -197,8 +197,9 @@ const MovieTheatres = () => {
                       <ClockIcon className="w-4 h-4" />
                       {isoTimeFormat(s.startTime)}
                       <span className="text-xs opacity-70">
-                        ({s.screen.name})
-                      </span>
+  ({s?.screen?.name || "Screen"})
+</span>
+
                     </button>
                   ))}
                 </div>
