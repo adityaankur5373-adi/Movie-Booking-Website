@@ -289,15 +289,23 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
   // -----------------------------------
   // IST day boundaries → UTC
   // -----------------------------------
-  const IST_OFFSET = 330 * 60 * 1000;
+  // IST offset
+const IST_OFFSET = 330 * 60 * 1000;
 
-  const istNow = new Date(now.getTime() + IST_OFFSET);
+// Create IST date first
+const istDate = new Date(date + "T00:00:00");
 
-  const istStartOfDay = new Date(istNow);
-  istStartOfDay.setHours(0, 0, 0, 0);
+// IST day boundaries
+const istStart = new Date(istDate);
+istStart.setHours(0, 0, 0, 0);
 
-  const istEndOfDay = new Date(istNow);
-  istEndOfDay.setHours(23, 59, 59, 999);
+const istEnd = new Date(istDate);
+istEnd.setHours(23, 59, 59, 999);
+
+// Convert to UTC for DB query
+const start = new Date(istStart.getTime() - IST_OFFSET);
+const end = new Date(istEnd.getTime() - IST_OFFSET);
+
 
   const utcStartOfDay = new Date(istStartOfDay.getTime() - IST_OFFSET);
   const utcEndOfDay = new Date(istEndOfDay.getTime() - IST_OFFSET);
