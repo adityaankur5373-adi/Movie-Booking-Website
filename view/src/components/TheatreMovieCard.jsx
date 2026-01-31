@@ -52,8 +52,9 @@ const TheatreMovieCard = ({ movie, shows = [], onSelectShow }) => {
       {/* Show Times */}
       <div className="flex flex-wrap gap-2 mt-4 pb-3">
         {shows?.map((s) => {
+          // ✅ IMPORTANT FIXES
+          const startTime = new Date(s.startTime); // convert string → Date
           const screenName = s?.screen?.name ?? "Screen";
-          const hasStarted = s?.hasStarted ?? false;
           const isBookable = s?.isBookable ?? false;
 
           return (
@@ -61,7 +62,7 @@ const TheatreMovieCard = ({ movie, shows = [], onSelectShow }) => {
               key={s.id}
               disabled={!isBookable}
               onClick={() =>
-                isBookable && onSelectShow?.(s.id, s.startTime)
+                isBookable && onSelectShow?.(s.id, startTime)
               }
               className={`flex items-center gap-1 px-3 py-2 text-xs border transition 
                 rounded-full font-medium active:scale-95
@@ -72,7 +73,7 @@ const TheatreMovieCard = ({ movie, shows = [], onSelectShow }) => {
                 }`}
             >
               <ClockIcon className="w-4 h-4" />
-              {isoTimeFormat(s.startTime)}
+              {isoTimeFormat(startTime)}
               <span className="text-xs opacity-70">
                 ({screenName})
               </span>
