@@ -88,7 +88,7 @@ const TrailerSection = () => {
           <>
             {embedUrl ? (
               <ReactPlayer
-                url={embedUrl}   
+                src={embedUrl}   
                 controls
                 className="mx-auto max-w-full"
                 width="960px"
