@@ -5,7 +5,7 @@ import api from "../api/api";
 import Loading from "../components/Loading";
 import BlurCircle from "../components/BlurCircle";
 import { MapPin, Monitor } from "lucide-react";
-
+import { dateFormat } from "../lib/dateFormat";
 const fetchMyBookings = async () => {
   const { data } = await api.get("/bookings/me");
   return data.bookings || [];
