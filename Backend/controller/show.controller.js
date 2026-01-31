@@ -41,12 +41,20 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
     orderBy: { startTime: "asc" },
   });
 
-  const showsWithStatus = shows.map((s) => ({
-    ...s,
-    hasStarted: now >= s.startTime,
-    isBookable:
-      s.startTime.getTime() - now.getTime() > -GRACE_MINUTES * 60000,
-  }));
+  const showsWithStatus = shows.map((s) => {
+    const diff = s.startTime.getTime() - now.getTime();
+
+    const isStarted = now >= s.startTime;
+    const isBookable = diff > -GRACE_MINUTES * 60000;
+    const isEnded = diff <= -GRACE_MINUTES * 60000;
+
+    return {
+      ...s,
+      isStarted,   // running started
+      isBookable,  // booking allowed
+      isEnded,     // fully closed
+    };
+  });
 
   res.json({ success: true, shows: showsWithStatus });
 });

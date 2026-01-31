@@ -52,34 +52,43 @@ const TheatreMovieCard = ({ movie, shows = [], onSelectShow }) => {
       {/* Show Times */}
       <div className="flex flex-wrap gap-2 mt-4 pb-3">
         {shows?.map((s) => {
-          // ✅ IMPORTANT FIXES
-          const startTime = new Date(s.startTime); // convert string → Date
-          const screenName = s?.screen?.name ?? "Screen";
-          const isBookable = s?.isBookable ?? false;
+  const startTime = new Date(s.startTime);
+  const screenName = s?.screen?.name ?? "Screen";
 
-          return (
-            <button
-              key={s.id}
-              disabled={!isBookable}
-              onClick={() =>
-                isBookable && onSelectShow?.(s.id, startTime)
-              }
-              className={`flex items-center gap-1 px-3 py-2 text-xs border transition 
-                rounded-full font-medium active:scale-95
-                ${
-                  !isBookable
-                    ? "border-white/10 text-gray-500 bg-black/30 cursor-not-allowed"
-                    : "border-white/30 text-white hover:bg-white hover:text-black cursor-pointer"
-                }`}
-            >
-              <ClockIcon className="w-4 h-4" />
-              {isoTimeFormat(startTime)}
-              <span className="text-xs opacity-70">
-                ({screenName})
-              </span>
-            </button>
-          );
-        })}
+  const isBookable = s?.isBookable ?? false;
+  const isStarted = s?.isStarted ?? false;
+  const isEnded = s?.isEnded ?? false;
+
+  return (
+    <button
+      key={s.id}
+      disabled={!isBookable}
+      onClick={() =>
+        onSelectShow?.(s.id, startTime, isBookable)
+      }
+      className={`flex items-center gap-1 px-3 py-2 text-xs border transition 
+        rounded-full font-medium active:scale-95
+        ${
+          !isBookable
+            ? "border-white/10 text-gray-500 bg-black/30 cursor-not-allowed"
+            : "border-white/30 text-white hover:bg-white hover:text-black cursor-pointer"
+        }`}
+    >
+      <ClockIcon className="w-4 h-4" />
+
+      {isEnded
+        ? "Ended"
+        : isStarted
+        ? `${isoTimeFormat(startTime)} • Running`
+        : isoTimeFormat(startTime)}
+
+      <span className="text-xs opacity-70">
+        ({screenName})
+      </span>
+    </button>
+  );
+})}
+
       </div>
 
       <p className="flex items-center gap-1 text-sm text-gray-400 mt-1 pr-1">
