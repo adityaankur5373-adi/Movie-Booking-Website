@@ -199,6 +199,9 @@ const MovieTheatres = () => {
                       <span className="text-xs opacity-70">
   ({s?.screen?.name || "Screen"})
 </span>
+                  <span className="text-xs opacity-60">
+  {s.hasStarted ? "(Running)" : ""}
+</span>
 
                     </button>
                   ))}
