@@ -1,4 +1,4 @@
-
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { useSession } from "./hooks/useSession";
@@ -38,6 +38,22 @@ import CreateScreen from "./admin/CreateScreen";
 
 const App = () => {
   const { isLoading } = useSession();
+ useEffect(() => {
+  const ua = navigator.userAgent || "";
+
+  const isLinkedIn = /LinkedIn/i.test(ua);
+
+  if (isLinkedIn) {
+    const open = window.confirm(
+      "For login & payments, please open this app in Chrome/Safari.\n\nTap OK to open in browser."
+    );
+
+    if (open) {
+      // Android → open Chrome directly
+      window.location.href = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
+    }
+  }
+}, []);
 
   if (isLoading) return <Loading />;
 
