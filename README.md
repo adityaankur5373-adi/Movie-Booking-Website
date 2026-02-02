@@ -18,8 +18,6 @@ Built with **Redis seat locking, optimistic concurrency control, Stripe payments
 
 ## 📸 Screenshots
 
-> Add these images inside a folder named `screenshots/`
-
 ![Home](./screenshots/home.png)
 ![Movies](./screenshots/moviespage.png)
 ![Threaters](./screenshots/threaterpage.png)
@@ -27,7 +25,6 @@ Built with **Redis seat locking, optimistic concurrency control, Stripe payments
 ![Threater Details](./screenshots/threaterdeatailpage.png)
 ![Seats](./screenshots/seatlayoutpage.png)
 ![Payment](./screenshots/payment.png)
-![Admin Panel](./screenshots/admindashboard.png)
 ![Admin Pages](./screenshots/addshow.png)
 
 ---
