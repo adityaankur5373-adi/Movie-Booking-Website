@@ -25,6 +25,7 @@ Built with **Redis seat locking, optimistic concurrency control, Stripe payments
 ![Threater Details](./screenshots/threaterdeatailpage.png)
 ![Seats](./screenshots/seatlayoutpage.png)
 ![Payment](./screenshots/payment.png)
+![Booking page](./screenshots/mybookingpage.png)
 ![Admin Pages](./screenshots/addshow.png)
 
 ---
