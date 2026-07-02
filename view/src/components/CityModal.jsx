@@ -43,7 +43,7 @@ function CityModal({ onClose }) {
             position.coords.latitude,
             position.coords.longitude
           );
-
+          console.log("Detect API success:", data);
           setSelectedCity(data.city);
            onClose?.(); // IMPORTANT
         } catch (error) {
