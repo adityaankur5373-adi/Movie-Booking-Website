@@ -11,7 +11,10 @@ import {
 
 import { useLocationStore } from "../store/useLocationStore";
 
-function CityModal({ onClose }) {
+function CityModal({
+  onClose,
+  canClose = true,
+}) {
   const { setSelectedCity } = useLocationStore();
 
   const [cities, setCities] = useState([]);
