@@ -21,7 +21,7 @@ router.post(
   "/select-city",
   selectCity
 );
-router.post(
+router.get(
   "/current",
   getCurrentSelectedCity
 );
