@@ -66,10 +66,15 @@ model Cast {
 
 model Theatre {
   id         String   @id @default(uuid())
-  name        String @unique
+  name       String   @unique
+
   city       String
   area       String
   address    String
+
+  latitude   Float
+  longitude  Float
+
   createdAt  DateTime @default(now())
   screenList Screen[]
 }

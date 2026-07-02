@@ -53,7 +53,6 @@ const MovieDetails = () => {
     enabled: !!id,
     staleTime: 30 * 1000,
   });
-   console.log(shows)
   // ✅ Group shows by date (same logic, optimized)
   const groupedDateTime = useMemo(() => {
     const grouped = shows.reduce((acc, s) => {

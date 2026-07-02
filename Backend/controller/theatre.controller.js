@@ -27,19 +27,26 @@ const bumpTheatresCacheVersion = async () => {
 const theatresListKey = (version, city) =>
   `theatres:v${version}:list:city=${city || "all"}`;
 
-const theatreDetailsKey = (version, id) => `theatres:v${version}:details:${id}`;
+const theatreDetailsKey =
+  (version, city, id) =>
+    `theatres:v${version}:details:${city}:${id}`;
 
 // =====================================
 // GET /api/theatres?city=Delhi
 // Public: list theatres (with screen count)
 // =====================================
 export const getTheatres = asyncHandler(async (req, res) => {
-  const city = req.query.city?.trim() || null;
+  const city = req.cookies.selectedCity;
+
+  if (!city) {
+    throw new AppError("Please select a city", 400);
+  }
 
   const version = await getTheatresCacheVersion();
   const cacheKey = theatresListKey(version, city);
 
   const cached = await redis.get(cacheKey);
+
   if (cached) {
     return res.json({
       success: true,
@@ -49,8 +56,12 @@ export const getTheatres = asyncHandler(async (req, res) => {
   }
 
   const theatres = await prisma.theatre.findMany({
-    where: city ? { city } : undefined,
-    orderBy: { createdAt: "desc" },
+    where: {
+      city,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
     select: {
       id: true,
       name: true,
@@ -58,17 +69,23 @@ export const getTheatres = asyncHandler(async (req, res) => {
       area: true,
       address: true,
       createdAt: true,
+
       _count: {
-        select: { screenList: true },
+        select: {
+          screenList: true,
+        },
       },
     },
   });
 
   await redis.set(cacheKey, JSON.stringify(theatres), "EX", 300);
 
-  res.json({ success: true, source: "db", theatres });
+  res.json({
+    success: true,
+    source: "db",
+    theatres,
+  });
 });
-
 // =====================================
 // GET /api/theatres/:id
 // Public: get single theatre
@@ -79,8 +96,18 @@ export const getTheatreById = asyncHandler(async (req, res) => {
    if (!theatreId) {
     throw new AppError("theatreId is required", 400);
   }
+
+  const city = req.cookies.selectedCity;
+
+  if (!city) {
+    throw new AppError("Please select a city", 400);
+  }
   const version = await getTheatresCacheVersion();
-  const cacheKey = theatreDetailsKey(version, theatreId);
+  const cacheKey = theatreDetailsKey(
+    version,
+    city,
+    theatreId
+);
 
   const cached = await redis.get(cacheKey);
   if (cached) {
@@ -91,8 +118,11 @@ export const getTheatreById = asyncHandler(async (req, res) => {
     });
   }
 
-  const theatre = await prisma.theatre.findUnique({
-    where: { id: theatreId },
+  const theatre = await prisma.theatre.findFirst({
+    where: {
+      id: theatreId,
+      city,
+    },
     select: {
       id: true,
       name: true,
@@ -129,20 +159,38 @@ export const getTheatreById = asyncHandler(async (req, res) => {
 // ADMIN: create theatre
 // =====================================
 export const createTheatre = asyncHandler(async (req, res) => {
-  const { name, city, area, address } = req.body;
+  const {
+  name,
+  city,
+  area,
+  address,
+  latitude,
+  longitude,
+} = req.body;
 
-  if (!name?.trim() || !city?.trim()) {
-    throw new AppError("name and city are required", 400);
-  }
+  if (
+  !name?.trim() ||
+  !city?.trim() ||
+  latitude === undefined ||
+  longitude === undefined
+) {
+  throw new AppError(
+    "name, city, latitude and longitude are required",
+    400
+  );
+}
 
-  const theatre = await prisma.theatre.create({
-    data: {
-      name: name.trim(),
-      city: city.trim(),
-      area: area?.trim() || null,
-      address: address?.trim() || null,
-    },
-  });
+ const theatre = await prisma.theatre.create({
+  data: {
+    name: name.trim(),
+    city: city.trim(),
+    area: area?.trim() || null,
+    address: address?.trim() || null,
+
+    latitude: Number(latitude),
+    longitude: Number(longitude),
+  },
+});
 
   await bumpTheatresCacheVersion();
 

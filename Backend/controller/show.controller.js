@@ -13,6 +13,16 @@ import { expireOldBookings } from "../utils/expireOldBookings.js";
 export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   const { movieId, date } = req.query;
 
+  if (!movieId || !date) {
+    throw new AppError("movieId and date are required", 400);
+  }
+
+  const city = req.cookies.selectedCity;
+
+  if (!city) {
+    throw new AppError("Please select a city", 400);
+  }
+
   const start = new Date(date);
   start.setHours(0, 0, 0, 0);
 
@@ -25,20 +35,43 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
   const shows = await prisma.show.findMany({
     where: {
       movieId,
-      startTime: { gte: start, lte: end },
+
+      startTime: {
+        gte: start,
+        lte: end,
+      },
+
+      // ✅ Filter by selected city
+      screen: {
+        theatre: {
+          city,
+        },
+      },
     },
+
     select: {
       id: true,
       startTime: true,
+
       screen: {
         select: {
           id: true,
           name: true,
-          theatre: true,
+
+          theatre: {
+            select: {
+              id: true,
+              name: true,
+              area: true,
+            },
+          },
         },
       },
     },
-    orderBy: { startTime: "asc" },
+
+    orderBy: {
+      startTime: "asc",
+    },
   });
 
   const showsWithStatus = shows.map((s) => {
@@ -50,13 +83,16 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
 
     return {
       ...s,
-      isStarted,   // running started
-      isBookable,  // booking allowed
-      isEnded,     // fully closed
+      isStarted,
+      isBookable,
+      isEnded,
     };
   });
 
-  res.json({ success: true, shows: showsWithStatus });
+  res.json({
+    success: true,
+    shows: showsWithStatus,
+  });
 });
 
 // =====================================
@@ -66,9 +102,27 @@ export const getShowById = asyncHandler(async (req, res) => {
  
 
   const { showId } = req.params;
+     if (!showId) {
+    throw new AppError("showId is required", 400);
+  }
+
+  const city = req.cookies.selectedCity;
+
+  if (!city) {
+    throw new AppError("Please select a city", 400);
+  }
+
      await expireOldBookings(prisma);
-  const show = await prisma.show.findUnique({
-    where: { id: showId },
+   const show = await prisma.show.findFirst({
+    where: {
+      id: showId,
+
+      screen: {
+        theatre: {
+          city,
+        },
+      },
+    },
     select: {
       id: true,
       startTime: true,
@@ -165,7 +219,10 @@ export const createShow = asyncHandler(async (req, res) => {
 export const getShowsByMovie = asyncHandler(async (req, res) => {
   const { movieId } = req.params;
   if (!movieId) throw new AppError("movieId is required", 400);
-
+    const city = req.cookies.selectedCity;
+  if (!city) {
+    throw new AppError("Please select a city", 400);
+  }
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
@@ -173,11 +230,16 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
     where: {
       movieId,
       startTime: { gte: startOfToday },
+       // ✅ Only shows from the selected city
+      screen: {
+        theatre: {
+          city,
+        },
+      },
     },
     select: {
       id: true,
       startTime: true,
-      seatPrice: true,
       screen: {
         select: {
           id: true,
@@ -200,9 +262,19 @@ export const getShowsByMovie = asyncHandler(async (req, res) => {
 export const getShowsByTheatre = asyncHandler(async (req, res) => {
   const { theatreId } = req.params;
 
+  if (!theatreId) {
+    throw new AppError("Theatre ID is required", 400);
+  }
+
+  const city = req.cookies.selectedCity;
+
+  if (!city) {
+    throw new AppError("Please select a city", 400);
+  }
+
   const now = new Date();
 
-  // ✅ today only filter
+  // Today only
   const start = new Date();
   start.setHours(0, 0, 0, 0);
 
@@ -213,15 +285,24 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
 
   const shows = await prisma.show.findMany({
     where: {
-      screen: { theatreId },
+      screen: {
+        theatreId,
+
+        theatre: {
+          city,
+        },
+      },
+
       startTime: {
         gte: start,
         lte: end,
       },
     },
+
     select: {
       id: true,
       startTime: true,
+
       movie: {
         select: {
           id: true,
@@ -230,26 +311,41 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
           runtime: true,
           voteAverage: true,
           releaseDate: true,
+
           genres: {
-            select: { id: true, name: true },
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
       },
+
       screen: {
-        select: { id: true, name: true },
+        select: {
+          id: true,
+          name: true,
+        },
       },
     },
-    orderBy: { startTime: "asc" },
+
+    orderBy: {
+      startTime: "asc",
+    },
   });
 
   const showsWithStatus = shows.map((show) => {
-    const diff = show.startTime.getTime() - now.getTime();
+    const diff =
+      show.startTime.getTime() - now.getTime();
 
-    const isStarted = now >= show.startTime;
+    const isStarted =
+      now >= show.startTime;
 
-    const isBookable = diff > -GRACE_MINUTES * 60000;
+    const isBookable =
+      diff > -GRACE_MINUTES * 60000;
 
-    const isEnded = diff <= -GRACE_MINUTES * 60000;
+    const isEnded =
+      diff <= -GRACE_MINUTES * 60000;
 
     return {
       ...show,
@@ -259,9 +355,11 @@ export const getShowsByTheatre = asyncHandler(async (req, res) => {
     };
   });
 
-  res.json({ success: true, shows: showsWithStatus });
+  res.json({
+    success: true,
+    shows: showsWithStatus,
+  });
 });
-
 
 
 // =====================================

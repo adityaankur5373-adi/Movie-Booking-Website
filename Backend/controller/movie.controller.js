@@ -26,13 +26,15 @@ const bumpMoviesCacheVersion = async () => {
 // =====================================
 // Cache Key Helpers
 // =====================================
-const movieListCacheKey = (version, limit, cursor) =>
-  `movies:v${version}:list:limit=${limit}:cursor=${cursor || "null"}`;
+const movieListCacheKey =
+  (version, city, limit, cursor) =>
+    `movies:v${version}:city=${city}:limit=${limit}:cursor=${cursor || "null"}`;
 
 const movieDetailsCacheKey = (version, id) => `movies:v${version}:details:${id}`;
 
-const featuredMoviesCacheKey = (version, limit) =>
-  `movies:v${version}:featured:limit=${limit}`;
+const featuredMoviesCacheKey =
+  (version, city, limit) =>
+    `movies:v${version}:featured:city=${city}:limit=${limit}`;
 
 const adminAllMoviesCacheKey = (version) => `movies:v${version}:admin:all`;
 
@@ -41,14 +43,23 @@ const adminAllMoviesCacheKey = (version) => `movies:v${version}:admin:all`;
 // GET /api/movies?limit=12&cursor=uuid
 // ================================
 export const getMovies = asyncHandler(async (req, res) => {
+  const city = req.cookies.selectedCity;
+
+  if (!city) {
+    throw new AppError("Please select a city", 400);
+  }
+
   const limit = Math.min(parseInt(req.query.limit) || 12, 50);
   const cursor = req.query.cursor || null;
 
+  // Cache should include city
   const version = await getMoviesCacheVersion();
-  const cacheKey = movieListCacheKey(version, limit, cursor);
 
-  // ✅ 1) Cache check
+  const cacheKey =
+    `movies:v${version}:city=${city}:limit=${limit}:cursor=${cursor || "null"}`;
+
   const cached = await redis.get(cacheKey);
+
   if (cached) {
     return res.json({
       success: true,
@@ -57,42 +68,72 @@ export const getMovies = asyncHandler(async (req, res) => {
     });
   }
 
-  // ✅ 2) DB fetch
   const movies = await prisma.movie.findMany({
     take: limit + 1,
+
     ...(cursor && {
       skip: 1,
-      cursor: { id: cursor },
+      cursor: {
+        id: cursor,
+      },
     }),
-      select: {
-    id: true,
-    title: true,
-    posterPath: true,
-    releaseDate: true,
-    runtime: true,
-    voteAverage: true,
 
-    // if you want genres only (light)
-    genres: {
-      select: { id: true, name: true },
+    where: {
+      shows: {
+        some: {
+          screen: {
+            theatre: {
+              city,
+            },
+          },
+        },
+      },
     },
-  },
-    orderBy: { createdAt: "desc" },
+
+    select: {
+      id: true,
+      title: true,
+      posterPath: true,
+      releaseDate: true,
+      runtime: true,
+      voteAverage: true,
+
+      genres: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
   const hasNextPage = movies.length > limit;
-  const data = hasNextPage ? movies.slice(0, limit) : movies;
+
+  const data = hasNextPage
+    ? movies.slice(0, limit)
+    : movies;
 
   const responseData = {
     movies: data,
-    nextCursor: hasNextPage ? data[data.length - 1].id : null,
+    nextCursor: hasNextPage
+      ? data[data.length - 1].id
+      : null,
+
     hasNextPage,
   };
 
-  // ✅ 3) Save cache (TTL 60 sec)
-  await redis.set(cacheKey, JSON.stringify(responseData), "EX", 300);
+  await redis.set(
+    cacheKey,
+    JSON.stringify(responseData),
+    "EX",
+    300
+  );
 
-  return res.json({
+  res.json({
     success: true,
     source: "db",
     ...responseData,
@@ -431,12 +472,30 @@ export const deleteMovie = asyncHandler(async (req, res) => {
 // GET /api/movies/featured?limit=4
 // ================================
 export const getFeaturedMovies = asyncHandler(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 4, 20);
+  const city = req.cookies.selectedCity;
+
+  if (!city) {
+    throw new AppError(
+      "Please select a city",
+      400
+    );
+  }
+
+  const limit = Math.min(
+    parseInt(req.query.limit) || 4,
+    20
+  );
 
   const version = await getMoviesCacheVersion();
-  const cacheKey = featuredMoviesCacheKey(version, limit);
+
+  const cacheKey = featuredMoviesCacheKey(
+    version,
+    city,
+    limit
+  );
 
   const cached = await redis.get(cacheKey);
+
   if (cached) {
     return res.json({
       success: true,
@@ -445,33 +504,64 @@ export const getFeaturedMovies = asyncHandler(async (req, res) => {
     });
   }
 
- const movies = await prisma.movie.findMany({
-  take: limit,
-  select: {
-    id: true,
-    title: true,
-    posterPath: true,
-    voteAverage: true,
-    genres: { select: { id: true, name: true } },
-    trailers: {
-  select: {
-    id: true,
-  image   : true,
-  videoUrl  : true,
-  youtubeKey :true,
-  }
-}
+  const movies = await prisma.movie.findMany({
+    take: limit,
 
-  },
-  orderBy: { createdAt: "desc" },
-});
+    // ✅ Only movies running in the selected city
+    where: {
+      shows: {
+        some: {
+          screen: {
+            theatre: {
+              city,
+            },
+          },
+        },
+      },
+    },
+
+    select: {
+      id: true,
+      title: true,
+      posterPath: true,
+      voteAverage: true,
+
+      genres: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+
+      trailers: {
+        select: {
+          id: true,
+          image: true,
+          videoUrl: true,
+          youtubeKey: true,
+        },
+      },
+    },
+
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
 
   // TTL 2 min
-  await redis.set(cacheKey, JSON.stringify(movies), "EX", 120);
+  await redis.set(
+    cacheKey,
+    JSON.stringify(movies),
+    "EX",
+    120
+  );
 
-  res.json({ success: true, source: "db", movies });
+  res.json({
+    success: true,
+    source: "db",
+    movies,
+  });
 });
-
 // ================================
 // GET ALL MOVIES (ADMIN)
 // GET /api/movies/all
@@ -490,6 +580,7 @@ export const getAllmovies = asyncHandler(async (req, res) => {
   }
 
   const movies = await prisma.movie.findMany({
+    
   select: {
     id: true,
     title: true,

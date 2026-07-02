@@ -13,6 +13,7 @@ import { errorHandler } from "./middlewares/errorMiddleware.js";
 import favouriteRoutes from "./routes/favourite.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import  stripeWebhook  from "./controller/stripeWebhook.controller.js";
+import locationRoutes from "./routes/locationRoutes.js"
 dotenv.config();
 
 const app = express();
@@ -43,6 +44,10 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/favourites", favouriteRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use(
+  "/api/location",
+  locationRoutes
+);
 // Error Middleware (always last)
 app.use(errorHandler);
 
