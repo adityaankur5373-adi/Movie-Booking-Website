@@ -50,9 +50,10 @@ function CityModal({
           setSelectedCity(data.city);
            onClose?.(); // IMPORTANT
         } catch (error) {
-          toast.error(
-            error?.response?.data?.message );
-        }
+           toast.error(
+    error?.response?.data?.message ||
+    "Failed to detect your location"
+  );
       },
 
       async () => {
@@ -83,16 +84,9 @@ function CityModal({
     }
   };
 
-  const handleClose = async () => {
-    try {
-      //const data = await fallbackCity();
-
-     // setSelectedCity(data.city);
-       onClose?.(); // IMPORTANT
-    } catch (error) {
-      toast.error("Failed to close modal");
-    }
-  };
+const handleClose = () => {
+  onClose?.();
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
