@@ -45,6 +45,7 @@ function CityModal({ onClose }) {
           );
 
           setSelectedCity(data.city);
+           onClose?.(); // IMPORTANT
         } catch (error) {
           toast.error(
             error?.response?.data?.message ||
@@ -86,6 +87,7 @@ function CityModal({ onClose }) {
       const data = await fallbackCity();
 
       setSelectedCity(data.city);
+       onClose?.(); // IMPORTANT
     } catch (error) {
       toast.error("Failed to close modal");
     }
