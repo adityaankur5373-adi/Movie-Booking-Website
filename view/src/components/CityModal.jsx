@@ -48,9 +48,7 @@ function CityModal({ onClose }) {
            onClose?.(); // IMPORTANT
         } catch (error) {
           toast.error(
-            error?.response?.data?.message ||
-              "No theatres available nearby"
-          );
+            error?.response?.data?.message );
         }
       },
 
