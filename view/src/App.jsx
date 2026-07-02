@@ -48,6 +48,7 @@ const App = () => {
   queryKey: ["selected-city"],
   queryFn:  getCurrentCity ,
 });
+console.log("selectedCity:", selectedCity);
   if (isLoading || cityLoading) {
   return <Loading />;
 }
