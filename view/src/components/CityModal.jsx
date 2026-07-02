@@ -84,9 +84,9 @@ function CityModal({ onClose }) {
 
   const handleClose = async () => {
     try {
-      const data = await fallbackCity();
+      //const data = await fallbackCity();
 
-      setSelectedCity(data.city);
+     // setSelectedCity(data.city);
        onClose?.(); // IMPORTANT
     } catch (error) {
       toast.error("Failed to close modal");
