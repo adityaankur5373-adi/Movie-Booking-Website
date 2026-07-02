@@ -181,9 +181,12 @@ const Navbar = () => {
       />
 
       {/* CITY MODAL */}
-     {showCityModal && (
+    {showCityModal && (
   <CityModal
-    onClose={() => setShowCityModal(false)}
+    canClose
+    onClose={() =>
+      setShowCityModal(false)
+    }
   />
 )}
     </>

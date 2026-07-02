@@ -78,10 +78,8 @@ const App = () => {
       <Toaster />
 
       {!selectedCity && (
-        <CityModal
-  onClose={() => setShowCityModal(false)}
-/>
-      )}
+  <CityModal canClose={false} />
+)}
 
       <Routes>
         {/* MAIN LAYOUT */}
