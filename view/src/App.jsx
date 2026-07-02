@@ -1,11 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
+import { useLocationStore } from "./store/useLocationStore";
 import { useSession } from "./hooks/useSession";
-import { useQuery } from "@tanstack/react-query";
-import { getCurrentCity  } from "./api/locationApi";
+import { getCurrentCity } from "./api/locationApi";
 
 import CityModal from "./components/CityModal";
+
 // layouts
 import MainLayout from "./layouts/MainLayout";
 import AdminLayout from "./layouts/AdminLayout";
@@ -30,6 +31,7 @@ import Threaters from "./pages/Theatres";
 import TheatreDetails from "./pages/TheatreDetails";
 import MovieTheatres from "./pages/MovieTheatres";
 import PaymentSuccess from "./pages/PaymentSuccess";
+
 // admin
 import AdminDashboard from "./admin/AdminDashboard";
 import ListBooking from "./admin/ListBooking";
@@ -41,34 +43,78 @@ import CreateScreen from "./admin/CreateScreen";
 
 const App = () => {
   const { isLoading } = useSession();
+
   const {
-  data: selectedCity,
-  isLoading: cityLoading,
-} = useQuery({
-  queryKey: ["selected-city"],
-  queryFn:  getCurrentCity ,
-});
-console.log("selectedCity:", selectedCity);
+  selectedCity,
+  setSelectedCity,
+} = useLocationStore();
+
+
+  const [cityLoading, setCityLoading] =
+    useState(true);
+
+  useEffect(() => {
+  const fetchCity = async () => {
+    try {
+      const city =
+        await getCurrentCity();
+
+      setSelectedCity(city);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setCityLoading(false);
+    }
+  };
+
+  fetchCity();
+}, [setSelectedCity]);
   if (isLoading || cityLoading) {
-  return <Loading />;
-}
+    return <Loading />;
+  }
 
   return (
     <>
       <Toaster />
-       {!selectedCity && <CityModal />}
+
+      {!selectedCity && (
+        <CityModal
+  onClose={() => setShowCityModal(false)}
+/>
+      )}
+
       <Routes>
         {/* MAIN LAYOUT */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/movies" element={<Movies />} />
-          <Route path="/movies/:id" element={<MovieDetails />} />
-          <Route path="/shows/:showId/seats" element={<SeatLayout />} />
+          <Route
+            path="/movies"
+            element={<Movies />}
+          />
+          <Route
+            path="/movies/:id"
+            element={<MovieDetails />}
+          />
+          <Route
+            path="/shows/:showId/seats"
+            element={<SeatLayout />}
+          />
 
-          <Route path="/threater" element={<Threaters />} />
-          <Route path="/threater/:theatreId" element={<TheatreDetails />} />
-          <Route path="/movies/:movieId/theatres" element={<MovieTheatres />} />
-         
+          <Route
+            path="/threater"
+            element={<Threaters />}
+          />
+
+          <Route
+            path="/threater/:theatreId"
+            element={<TheatreDetails />}
+          />
+
+          <Route
+            path="/movies/:movieId/theatres"
+            element={<MovieTheatres />}
+          />
+
           <Route
             path="/my-bookings"
             element={
@@ -97,7 +143,7 @@ console.log("selectedCity:", selectedCity);
           />
         </Route>
 
-        {/* OTHER ROUTES (NO LAYOUT) */}
+        {/* OTHER ROUTES */}
         <Route
           path="/checkout/:bookingId"
           element={
@@ -106,12 +152,18 @@ console.log("selectedCity:", selectedCity);
             </ProtectedRoute>
           }
         />
-        <Route path="/movies-releases" element={<Releases />} />
-            <Route
-  path="/payment/success/:bookingId"
-  element={<PaymentSuccess />}
-/>
-        {/* ADMIN LAYOUT */}
+
+        <Route
+          path="/movies-releases"
+          element={<Releases />}
+        />
+
+        <Route
+          path="/payment/success/:bookingId"
+          element={<PaymentSuccess />}
+        />
+
+        {/* ADMIN */}
         <Route element={<AdminLayout />}>
           <Route
             path="/admin"
@@ -178,7 +230,10 @@ console.log("selectedCity:", selectedCity);
         </Route>
 
         {/* 404 */}
-        <Route path="*" element={<NotFound />} />
+        <Route
+          path="*"
+          element={<NotFound />}
+        />
       </Routes>
     </>
   );

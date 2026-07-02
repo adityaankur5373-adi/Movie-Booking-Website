@@ -1,42 +1,49 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu, X, Ticket, MapPin } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 
-import { assets } from "../assets/assets";
 import Profile from "./Profile.jsx";
 import AuthModal from "./AuthModal.jsx";
 import CityModal from "./CityModal.jsx";
 
 import useAuthStore from "../store/useAuthStore";
-import { getCurrentCity  } from "../api/locationApi";
+import { useLocationStore } from "../store/useLocationStore";
 
 const Navbar = () => {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthStore(
+    (s) => s.isAuthenticated
+  );
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [showAuth, setShowAuth] = useState(false);
-  const [showCityModal, setShowCityModal] = useState(false);
+  const { selectedCity } =
+    useLocationStore();
 
-  const { data: selectedCity } = useQuery({
-    queryKey: ["selected-city"],
-    queryFn: getCurrentCity ,
-  });
+  const [menuOpen, setMenuOpen] =
+    useState(false);
 
-  // ✅ auto close auth modal if user logged in
+  const [showAuth, setShowAuth] =
+    useState(false);
+
+  const [
+    showCityModal,
+    setShowCityModal,
+  ] = useState(false);
+
+  // Close auth modal after login
   useEffect(() => {
-    if (isAuthenticated) setShowAuth(false);
+    if (isAuthenticated) {
+      setShowAuth(false);
+    }
   }, [isAuthenticated]);
 
   return (
     <>
-      <nav className="fixed top-0 left-0 z-50 w-full flex items-center justify-between px-6 md:px-16 lg:px-36 py-5 bg-transparent">
+      <nav className="fixed top-0 left-0 z-50 flex w-full items-center justify-between bg-transparent px-6 py-5 md:px-16 lg:px-36">
         {/* LOGO */}
         <Link
           to="/"
-          className="flex items-center gap-2 flex-1 md:flex-none"
+          className="flex flex-1 items-center gap-2 md:flex-none"
         >
-          <Ticket className="w-10 h-10 text-primary" />
+          <Ticket className="h-10 w-10 text-primary" />
 
           <span className="text-xl font-bold">
             CineSwift
@@ -46,72 +53,77 @@ const Navbar = () => {
         {/* MENU */}
         <div
           className={`max-md:absolute max-md:top-0 max-md:left-0 max-md:z-50
-          flex flex-col md:flex-row items-center justify-center gap-8
+          flex flex-col items-center justify-center gap-8
+          md:flex-row
           max-md:bg-black/80
-          md:bg-white/10 md:backdrop-blur-md
-          md:border md:border-white/20
-          md:rounded-full md:px-10 md:py-3
+          md:rounded-full md:border md:border-white/20
+          md:bg-white/10 md:px-10 md:py-3
+          md:backdrop-blur-md
           transition-all duration-300
           ${
             menuOpen
-              ? "max-md:w-full max-md:h-screen"
-              : "max-md:w-0 max-md:h-0 max-md:opacity-0"
+              ? "max-md:h-screen max-md:w-full"
+              : "max-md:h-0 max-md:w-0 max-md:opacity-0"
           }`}
         >
           <X
-            onClick={() => setMenuOpen(false)}
-            className="md:hidden absolute top-6 right-6 w-6 h-6 cursor-pointer"
+            onClick={() =>
+              setMenuOpen(false)
+            }
+            className="absolute top-6 right-6 h-6 w-6 cursor-pointer md:hidden"
           />
 
           <Link
-            className="text-white/90 hover:text-white transition font-medium"
+            to="/"
+            className="font-medium text-white/90 transition hover:text-white"
             onClick={() => {
               scrollTo(0, 0);
               setMenuOpen(false);
             }}
-            to="/"
           >
             Home
           </Link>
 
           <Link
-            className="text-white/90 hover:text-white transition font-medium"
+            to="/movies"
+            className="font-medium text-white/90 transition hover:text-white"
             onClick={() => {
               scrollTo(0, 0);
               setMenuOpen(false);
             }}
-            to="/movies"
           >
             Movies
           </Link>
 
           <Link
-            className="text-white/90 hover:text-white transition font-medium"
+            to="/threater"
+            className="font-medium text-white/90 transition hover:text-white"
             onClick={() => {
               scrollTo(0, 0);
               setMenuOpen(false);
             }}
-            to="/threater"
           >
             Theatres
           </Link>
 
           <Link
-            className="text-white/90 hover:text-white transition font-medium"
+            to="/movies-releases"
+            className="font-medium text-white/90 transition hover:text-white"
             onClick={() => {
               scrollTo(0, 0);
               setMenuOpen(false);
             }}
-            to="/movies-releases"
           >
             Releases
           </Link>
 
           {isAuthenticated && (
             <Link
-              className="text-white/90 hover:text-white transition font-medium"
-              onClick={() => setMenuOpen(false)}
               to="/favourite"
+              className="font-medium text-white/90 transition hover:text-white"
+              onClick={() =>
+                setMenuOpen(false)
+              }
             >
               Favourites
             </Link>
@@ -120,19 +132,22 @@ const Navbar = () => {
 
         {/* RIGHT SIDE */}
         <div className="flex items-center gap-4">
-          {/* CITY SELECTOR */}
+          {/* CITY */}
           <button
-            onClick={() => setShowCityModal(true)}
-            className="hidden sm:flex items-center gap-1 text-sm text-white/90 hover:text-white transition"
+            onClick={() =>
+              setShowCityModal(true)
+            }
+            className="hidden items-center gap-1 text-sm text-white/90 transition hover:text-white sm:flex"
           >
-            <MapPin className="w-4 h-4 text-primary" />
+            <MapPin className="h-4 w-4 text-primary" />
 
             <span className="max-w-[100px] truncate">
-              {selectedCity || "Select City"}
+              {selectedCity ||
+                "Select City"}
             </span>
           </button>
 
-          {/* AUTH / PROFILE */}
+          {/* AUTH */}
           {isAuthenticated ? (
             <Profile />
           ) : (
@@ -141,7 +156,7 @@ const Navbar = () => {
                 setShowAuth(true);
                 setMenuOpen(false);
               }}
-              className="px-4 py-1 sm:px-7 sm:py-2 bg-primary hover:bg-primary-dull transition rounded-full font-medium"
+              className="rounded-full bg-primary px-4 py-1 font-medium transition hover:bg-primary-dull sm:px-7 sm:py-2"
             >
               Login
             </button>
@@ -149,8 +164,10 @@ const Navbar = () => {
 
           {/* MOBILE MENU */}
           <Menu
-            onClick={() => setMenuOpen((prev) => !prev)}
-            className="md:hidden w-8 h-8 cursor-pointer"
+            onClick={() =>
+              setMenuOpen((prev) => !prev)
+            }
+            className="h-8 w-8 cursor-pointer md:hidden"
           />
         </div>
       </nav>
@@ -158,14 +175,15 @@ const Navbar = () => {
       {/* AUTH MODAL */}
       <AuthModal
         isOpen={showAuth}
-        onClose={() => setShowAuth(false)}
+        onClose={() =>
+          setShowAuth(false)
+        }
       />
 
       {/* CITY MODAL */}
-      <CityModal
-        isOpen={showCityModal}
-        onClose={() => setShowCityModal(false)}
-      />
+      {showCityModal && (
+        <CityModal />
+      )}
     </>
   );
 };

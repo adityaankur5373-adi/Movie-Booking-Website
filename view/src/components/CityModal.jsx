@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { MapPin, LocateFixed, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 
@@ -9,30 +9,42 @@ import {
   selectCity,
 } from "../api/locationApi";
 
-function CityModal() {
-  const queryClient = useQueryClient();
+import { useLocationStore } from "../store/useLocationStore";
 
-  const { data: cities = [], isLoading } = useQuery({
-    queryKey: ["cities"],
-    queryFn: getCities,
-  });
+function CityModal({ onClose }) {
+  const { setSelectedCity } = useLocationStore();
 
-  const refreshCity = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["selected-city"],
-    });
-  };
+  const [cities, setCities] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        setIsLoading(true);
+
+        const data = await getCities();
+
+        setCities(data);
+      } catch (error) {
+        toast.error("Failed to load cities");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCities();
+  }, []);
 
   const handleDetectLocation = () => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
-          await detectCity(
+          const data = await detectCity(
             position.coords.latitude,
             position.coords.longitude
           );
 
-          await refreshCity();
+          setSelectedCity(data.city);
         } catch (error) {
           toast.error(
             error?.response?.data?.message ||
@@ -40,10 +52,14 @@ function CityModal() {
           );
         }
       },
+
       async () => {
         try {
-          await fallbackCity();
-          await refreshCity();
+          const data = await fallbackCity();
+
+          setSelectedCity(data.city);
+          onClose?.();
+
         } catch (error) {
           toast.error("Failed to set default city");
         }
@@ -53,24 +69,30 @@ function CityModal() {
 
   const handleSelectCity = async (city) => {
     try {
-      await selectCity(city);
-      await refreshCity();
+      const data = await selectCity(city);
+
+      setSelectedCity(data.city);
+      onClose?.();
     } catch (error) {
-      toast.error(error?.response?.data?.message);
+      toast.error(
+        error?.response?.data?.message ||
+          "Failed to select city"
+      );
     }
   };
 
   const handleClose = async () => {
     try {
-      await fallbackCity();
-      await refreshCity();
+      const data = await fallbackCity();
+
+      setSelectedCity(data.city);
     } catch (error) {
       toast.error("Failed to close modal");
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
         {/* Close Button */}
         <button
@@ -83,7 +105,10 @@ function CityModal() {
         {/* Header */}
         <div className="flex flex-col items-center">
           <div className="rounded-full bg-gray-100 p-3">
-            <MapPin size={24} />
+            <MapPin
+              size={24}
+              className="text-black"
+            />
           </div>
 
           <h2 className="mt-3 text-xl font-bold text-black sm:text-2xl">
@@ -107,26 +132,32 @@ function CityModal() {
         {/* Divider */}
         <div className="my-5 flex items-center">
           <div className="h-px flex-1 bg-gray-300" />
-          <span className="mx-3 text-xs text-gray-500">OR</span>
+
+          <span className="mx-3 text-xs text-gray-500">
+            OR
+          </span>
+
           <div className="h-px flex-1 bg-gray-300" />
         </div>
 
         {/* Cities */}
-        <h3 className="mb-3 text-center text-base font-semibold">
+        <h3 className="mb-3 text-center text-base font-semibold text-black">
           Choose a City
         </h3>
 
         {isLoading ? (
           <p className="text-center text-sm text-gray-500">
-            Loading...
+            Loading cities...
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {cities.map((city) => (
               <button
                 key={city}
-                onClick={() => handleSelectCity(city)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium transition hover:bg-black hover:text-white"
+                onClick={() =>
+                  handleSelectCity(city)
+                }
+                className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white transition active:scale-95"
               >
                 {city}
               </button>
