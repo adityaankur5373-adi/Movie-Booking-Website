@@ -95,12 +95,15 @@ function CityModal({ onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
         {/* Close Button */}
-        <button
-          onClick={handleClose}
-          className="absolute right-3 top-3 rounded-full p-1.5 text-gray-500 transition hover:bg-gray-100"
-        >
-          <X size={18} />
-        </button>
+      {/* Close Button */}
+{canClose && (
+  <button
+    onClick={handleClose}
+    className="absolute right-3 top-3 rounded-full p-1.5 text-gray-500 transition hover:bg-gray-100"
+  >
+    <X size={18} />
+  </button>
+)}
 
         {/* Header */}
         <div className="flex flex-col items-center">
