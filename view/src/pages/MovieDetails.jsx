@@ -47,7 +47,10 @@ const MovieDetails = () => {
   });
 
   // ✅ Shows by movie
-  const { data: shows = [] } = useQuery({
+  const {
+  data: shows = [],
+  isLoading: showsLoading,
+} = useQuery({
   queryKey: ["showsByMovie", id, selectedCity],
   queryFn: () => fetchShowsByMovie(id),
   enabled: !!id && !!selectedCity,
@@ -71,7 +74,6 @@ const { data: relatedMovies = [] } = useQuery({
   enabled: !!id && !!selectedCity,
   staleTime: 2 * 60 * 1000,
 });
-
   // ✅ Favourite status
   const { data: isFav = false, isLoading: favStatusLoading } = useQuery({
     queryKey: ["favouriteStatus", id],
@@ -89,15 +91,21 @@ const { data: relatedMovies = [] } = useQuery({
         return api.post(`/favourites`, { movieId: id });
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(["favouriteStatus", id]);
-      queryClient.invalidateQueries(["favourites"]); // for Favourite page list
+   onSuccess: () => {
+  queryClient.invalidateQueries({
+    queryKey: ["favouriteStatus", id],
+  });
 
-      toast.success(isFav ? "Removed from favourites" : "Added to favourites ❤️");
-    },
-    onError: (err) => {
-      toast.error(err?.response?.data?.message || "Favourite failed");
-    },
+  queryClient.invalidateQueries({
+    queryKey: ["favourites"],
+  });
+
+  toast.success(
+    isFav
+      ? "Removed from favourites"
+      : "Added to favourites ❤️"
+  );
+},
   });
 
   const loading = movieLoading || showsLoading;
