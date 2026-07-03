@@ -273,3 +273,64 @@ export const getTheatreNamesAdmin = asyncHandler(
     });
   }
 );
+export const getTheatreByIdAdmin = asyncHandler(
+  async (req, res) => {
+    const { theatreId } = req.params;
+
+    if (!theatreId) {
+      throw new AppError(
+        "theatreId is required",
+        400
+      );
+    }
+
+    const theatre =
+      await prisma.theatre.findUnique({
+        where: {
+          id: theatreId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          area: true,
+          address: true,
+          latitude: true,
+          longitude: true,
+          createdAt: true,
+
+          _count: {
+            select: {
+              screenList: true,
+            },
+          },
+
+          screenList: {
+            select: {
+              id: true,
+              name: true,
+              screenNo: true,
+              createdAt: true,
+            },
+
+            orderBy: {
+              screenNo: "asc",
+            },
+          },
+        },
+      });
+
+    if (!theatre) {
+      throw new AppError(
+        "Theatre not found",
+        404
+      );
+    }
+
+    res.json({
+      success: true,
+      theatre,
+    });
+  }
+);

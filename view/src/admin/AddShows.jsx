@@ -49,7 +49,7 @@ const AddShows = () => {
   // ✅ Fetch theatres
   const fetchTheatres = async () => {
     try {
-      const { data } = await api.get("/threater");
+      const { data } = await api.get("/threater/admin/all");
 
       if (data?.success) {
         setTheatres(data.theatres || []);

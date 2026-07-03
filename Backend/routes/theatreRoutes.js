@@ -7,6 +7,7 @@ import {
   createTheatre,
   addScreenToTheatre,
   getTheatreNamesAdmin,
+  getTheatreByIdAdmin
 } from "../controller/theatre.controller.js";
 
 const router = Router();
@@ -20,5 +21,10 @@ router.get(
 router.get("/:theatreId", getTheatreById);
 router.post("/", protect, adminOnly, createTheatre);
 router.post("/:theatreId/screens", protect, adminOnly, addScreenToTheatre);
-
+router.get(
+  "/admin/:theatreId",
+  protect,
+  adminOnly,
+  getTheatreByIdAdmin
+);
 export default router;
