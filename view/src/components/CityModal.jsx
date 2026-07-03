@@ -46,61 +46,74 @@ function CityModal({
             position.coords.latitude,
             position.coords.longitude
           );
-          console.log("Detect API success:", data);
+
+          console.log(
+            "Detect API success:",
+            data
+          );
+
           setSelectedCity(data.city);
-           onClose?.(); // IMPORTANT
+          onClose?.();
         } catch (error) {
-           toast.error(
-    error?.response?.data?.message ||
-    "Failed to detect your location"
-  );
+          toast.error(
+            error?.response?.data
+              ?.message ||
+              "Failed to detect your location"
+          );
+        }
       },
 
       async () => {
         try {
-          const data = await fallbackCity();
+          const data =
+            await fallbackCity();
 
           setSelectedCity(data.city);
           onClose?.();
-
         } catch (error) {
-          toast.error("Failed to set default city");
+          toast.error(
+            "Failed to set default city"
+          );
         }
       }
     );
   };
 
-  const handleSelectCity = async (city) => {
+  const handleSelectCity = async (
+    city
+  ) => {
     try {
-      const data = await selectCity(city);
+      const data = await selectCity(
+        city
+      );
 
       setSelectedCity(data.city);
       onClose?.();
     } catch (error) {
       toast.error(
-        error?.response?.data?.message ||
+        error?.response?.data
+          ?.message ||
           "Failed to select city"
       );
     }
   };
 
-const handleClose = () => {
-  onClose?.();
-};
+  const handleClose = () => {
+    onClose?.();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm">
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
         {/* Close Button */}
-      {/* Close Button */}
-{canClose && (
-  <button
-    onClick={handleClose}
-    className="absolute right-3 top-3 rounded-full p-1.5 text-gray-500 transition hover:bg-gray-100"
-  >
-    <X size={18} />
-  </button>
-)}
+        {canClose && (
+          <button
+            onClick={handleClose}
+            className="absolute top-3 right-3 rounded-full p-1.5 text-gray-500 transition hover:bg-gray-100"
+          >
+            <X size={18} />
+          </button>
+        )}
 
         {/* Header */}
         <div className="flex flex-col items-center">
@@ -116,7 +129,8 @@ const handleClose = () => {
           </h2>
 
           <p className="mt-1 text-center text-xs text-gray-500 sm:text-sm">
-            Detect your location or choose a city manually.
+            Detect your location or choose a
+            city manually.
           </p>
         </div>
 
