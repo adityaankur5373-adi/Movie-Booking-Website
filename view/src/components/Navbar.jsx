@@ -128,36 +128,20 @@ const Navbar = () => {
               Favourites
             </Link>
           )}
-
-          {/* CITY BUTTON (MOBILE) */}
-          <button
-            onClick={() => {
-              setShowCityModal(true);
-              setMenuOpen(false);
-            }}
-            className="flex items-center gap-2 font-medium text-white/90 transition hover:text-white md:hidden"
-          >
-            <MapPin className="h-5 w-5 text-primary" />
-
-            <span>
-              {selectedCity ||
-                "Select City"}
-            </span>
-          </button>
         </div>
 
         {/* RIGHT SIDE */}
-        <div className="flex items-center gap-4">
-          {/* CITY BUTTON (DESKTOP) */}
+        <div className="flex items-center gap-3">
+          {/* CITY BUTTON */}
           <button
             onClick={() =>
               setShowCityModal(true)
             }
-            className="hidden items-center gap-1 text-sm text-white/90 transition hover:text-white md:flex"
+            className="flex items-center gap-1 text-sm text-white/90 transition hover:text-white"
           >
             <MapPin className="h-4 w-4 text-primary" />
 
-            <span className="max-w-[100px] truncate">
+            <span className="max-w-[80px] truncate hidden sm:inline">
               {selectedCity ||
                 "Select City"}
             </span>
