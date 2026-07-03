@@ -4,7 +4,7 @@ import Moviecard from "../components/Moviecard";
 import BlurCircle from "../components/BlurCircle";
 import api from "../api/api";
 import Loading from "../components/Loading";
-
+import { useLocationStore } from "../store/useLocationStore";
 const LIMIT = 12;
 
 const fetchMovies = async ({ pageParam = null }) => {
@@ -23,21 +23,27 @@ const fetchMovies = async ({ pageParam = null }) => {
 };
 
 const Movies = () => {
+  const { selectedCity } = useLocationStore();
   const {
-    data,
-    isLoading,
-    isError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: ["movies", { limit: LIMIT }],
-    queryFn: fetchMovies,
-    initialPageParam: null,
-    getNextPageParam: (lastPage) => lastPage?.nextCursor ?? undefined,
-    staleTime: 60 * 1000,
-  });
-
+  data,
+  isLoading,
+  isError,
+  fetchNextPage,
+  hasNextPage,
+  isFetchingNextPage,
+} = useInfiniteQuery({
+  queryKey: [
+    "movies",
+    selectedCity,
+    { limit: LIMIT },
+  ],
+  queryFn: fetchMovies,
+  initialPageParam: null,
+  getNextPageParam: (lastPage) =>
+    lastPage?.nextCursor ?? undefined,
+  staleTime: 60 * 1000,
+  enabled: !!selectedCity,
+});
   const movies = data?.pages?.flatMap((page) => page.movies) || [];
 
   if (isLoading) return <Loading />;

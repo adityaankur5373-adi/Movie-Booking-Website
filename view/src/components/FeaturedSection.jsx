@@ -4,7 +4,7 @@ import BlurCircle from "./BlurCircle";
 import Moviecard from "./Moviecard";
 import api from "../api/api";
 import { useQuery } from "@tanstack/react-query";
-
+import { useLocationStore } from "../store/useLocationStore";
 const fetchFeaturedMovies = async () => {
   const { data } = await api.get("/movies", {
     params: { limit: 4 },
@@ -17,15 +17,24 @@ const fetchFeaturedMovies = async () => {
 const FeaturedSection = () => {
   const navigate = useNavigate();
 
+   const { selectedCity } =
+    useLocationStore();
+
   const {
     data: movies = [],
     isLoading,
     isError,
     error,
   } = useQuery({
-    queryKey: ["featured-movies", 4],
-    queryFn: fetchFeaturedMovies,
-    staleTime: 1000 * 60 * 10, // 10 min cache
+    queryKey: [
+      "featured-movies",
+      selectedCity,
+      4,
+    ],
+    queryFn: () =>
+      fetchFeaturedMovies(selectedCity),
+    enabled: !!selectedCity,
+    staleTime: 1000 * 60 * 10,
     retry: 1,
   });
 
