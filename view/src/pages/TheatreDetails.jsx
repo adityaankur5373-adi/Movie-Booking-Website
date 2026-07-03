@@ -25,7 +25,7 @@ const fetchTheatreShows = async (theatreId) => {
 const TheatreDetails = () => {
   const { theatreId } = useParams();
   const navigate = useNavigate();
-
+ const { selectedCity } = useLocationStore();
   // ✅ theatre info
   const {
     data: theatre,
