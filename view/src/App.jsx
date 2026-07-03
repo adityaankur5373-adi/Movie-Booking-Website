@@ -93,10 +93,7 @@ const App = () => {
             path="/movies/:id"
             element={<MovieDetails />}
           />
-          <Route
-            path="/shows/:showId/seats"
-            element={<SeatLayout />}
-          />
+          
 
           <Route
             path="/threater"
@@ -142,6 +139,10 @@ const App = () => {
         </Route>
 
         {/* OTHER ROUTES */}
+        <Route
+            path="/shows/:showId/seats"
+            element={<SeatLayout />}
+          />
         <Route
           path="/checkout/:bookingId"
           element={
