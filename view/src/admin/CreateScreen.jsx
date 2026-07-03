@@ -33,7 +33,7 @@ const CreateScreen = () => {
     const fetchTheatres = async () => {
       try {
         setFetching(true);
-        const { data } = await api.get("/threater");
+        const { data } = await api.get("/threater/admin/all");
 
         if (data?.success) {
           setTheatres(data.theatres || []);

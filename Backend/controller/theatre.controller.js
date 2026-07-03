@@ -250,3 +250,26 @@ export const addScreenToTheatre = asyncHandler(async (req, res) => {
 
   res.status(201).json({ success: true, screen });
 });
+
+
+export const getTheatreNamesAdmin = asyncHandler(
+  async (req, res) => {
+    const theatres =
+      await prisma.theatre.findMany({
+        orderBy: [
+          { city: "asc" },
+          { name: "asc" },
+        ],
+        select: {
+          id: true,
+          name: true,
+          city: true,
+        },
+      });
+
+    res.json({
+      success: true,
+      theatres,
+    });
+  }
+);
