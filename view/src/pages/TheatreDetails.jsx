@@ -25,7 +25,7 @@ const fetchTheatreShows = async (theatreId) => {
 const TheatreDetails = () => {
   const { theatreId } = useParams();
   const navigate = useNavigate();
-  import { useLocationStore } from "../store/useLocationStore";
+
   // ✅ theatre info
   const {
     data: theatre,
