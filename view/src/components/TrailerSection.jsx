@@ -4,6 +4,7 @@ import ReactPlayer from "react-player";
 import { PlayCircleIcon } from "lucide-react";
 import api from "../api/api";
 import { useQuery } from "@tanstack/react-query";
+import { useLocationStore } from "../store/useLocationStore";
 
 const toEmbedUrl = (url) => {
   if (!url) return null;
@@ -39,6 +40,11 @@ const fetchFeaturedTrailers = async () => {
 
 const TrailerSection = () => {
   const [currentTrailer, setCurrentTrailer] = useState(null);
+const { selectedCity } =
+    useLocationStore();
+
+  const [currentTrailer, setCurrentTrailer] =
+    useState(null);
 
   const {
     data: trailers = [],
@@ -46,18 +52,23 @@ const TrailerSection = () => {
     isError,
     error,
   } = useQuery({
-    queryKey: ["featured-trailers", 4],
+    queryKey: [
+      "featured-trailers",
+      selectedCity,
+      4,
+    ],
     queryFn: fetchFeaturedTrailers,
+    enabled: !!selectedCity,
     staleTime: 1000 * 60 * 10,
   });
 
-  // ✅ safer than onSuccess
   useEffect(() => {
-    if (!currentTrailer && trailers.length > 0) {
+    if (trailers.length > 0) {
       setCurrentTrailer(trailers[0]);
+    } else {
+      setCurrentTrailer(null);
     }
   }, [trailers]);
-
   const embedUrl = useMemo(
     () => toEmbedUrl(currentTrailer?.videoUrl),
     [currentTrailer]
