@@ -8,7 +8,7 @@ import Moviecard from "../components/Moviecard";
 import Loading from "../components/Loading";
 import api from "../api/api";
 import { toast } from "react-hot-toast";
-
+import { useLocationStore } from "../store/useLocationStore";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const fetchMovie = async (id) => {
@@ -37,7 +37,7 @@ const MovieDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const queryClient = useQueryClient();
-
+ const { selectedCity } = useLocationStore();
   // ✅ Movie details
   const { data: movie, isLoading: movieLoading } = useQuery({
     queryKey: ["movie", id],
@@ -47,12 +47,12 @@ const MovieDetails = () => {
   });
 
   // ✅ Shows by movie
-  const { data: shows = [], isLoading: showsLoading } = useQuery({
-    queryKey: ["showsByMovie", id],
-    queryFn: () => fetchShowsByMovie(id),
-    enabled: !!id,
-    staleTime: 30 * 1000,
-  });
+  const { data: shows = [] } = useQuery({
+  queryKey: ["showsByMovie", id, selectedCity],
+  queryFn: () => fetchShowsByMovie(id),
+  enabled: !!id && !!selectedCity,
+  staleTime: 30 * 1000,
+});
   // ✅ Group shows by date (same logic, optimized)
   const groupedDateTime = useMemo(() => {
     const grouped = shows.reduce((acc, s) => {
@@ -65,12 +65,12 @@ const MovieDetails = () => {
   }, [shows]);
 
   // ✅ Related movies
-  const { data: relatedMovies = [] } = useQuery({
-    queryKey: ["relatedMovies", id],
-    queryFn: () => fetchRelatedMovies(id),
-    enabled: !!id,
-    staleTime: 2 * 60 * 1000,
-  });
+const { data: relatedMovies = [] } = useQuery({
+  queryKey: ["relatedMovies", id, selectedCity],
+  queryFn: () => fetchRelatedMovies(id),
+  enabled: !!id && !!selectedCity,
+  staleTime: 2 * 60 * 1000,
+});
 
   // ✅ Favourite status
   const { data: isFav = false, isLoading: favStatusLoading } = useQuery({
