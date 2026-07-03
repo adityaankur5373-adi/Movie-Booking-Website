@@ -7,7 +7,7 @@ import TheatreMovieCard from "../components/TheatreMovieCard";
 import Loading from "../components/Loading";
 import api from "../api/api";
 import { useQuery } from "@tanstack/react-query";
-
+import { useLocationStore } from "../store/useLocationStore";
 // ❌ REMOVED isPastShow — backend decides booking validity
 
 const fetchTheatre = async (theatreId) => {
@@ -25,28 +25,28 @@ const fetchTheatreShows = async (theatreId) => {
 const TheatreDetails = () => {
   const { theatreId } = useParams();
   const navigate = useNavigate();
-
+  import { useLocationStore } from "../store/useLocationStore";
   // ✅ theatre info
   const {
     data: theatre,
     isLoading: theatreLoading,
     isError: theatreError,
   } = useQuery({
-    queryKey: ["theatre", theatreId],
+    queryKey: ["theatre", theatreId, selectedCity],
     queryFn: () => fetchTheatre(theatreId),
-    enabled: !!theatreId,
+    enabled: !!theatreId && !!selectedCity,
     staleTime: 5 * 60 * 1000,
   });
 
-  // ✅ shows running in this theatre (today)
+  // ✅ shows running in this theatre (city-based)
   const {
     data: theatreShows = [],
     isLoading: showsLoading,
     isError: showsError,
   } = useQuery({
-    queryKey: ["theatreShows", theatreId],
+    queryKey: ["theatreShows", theatreId, selectedCity],
     queryFn: () => fetchTheatreShows(theatreId),
-    enabled: !!theatreId,
+    enabled: !!theatreId && !!selectedCity,
     staleTime: 30 * 1000,
   });
 

@@ -6,7 +6,7 @@ import { ClockIcon, MapPinIcon, FilmIcon } from "lucide-react";
 import isoTimeFormat from "../lib/isoTimeFormat";
 import { toast } from "react-hot-toast";
 import api from "../api/api";
-
+import { useLocationStore } from "../store/useLocationStore";
 const MovieTheatres = () => {
   const { movieId } = useParams();
   const [searchParams] = useSearchParams();
@@ -17,50 +17,70 @@ const MovieTheatres = () => {
   const [movie, setMovie] = useState(null);
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const { selectedCity } = useLocationStore();
   // ========================
   // Fetch Movie + Shows
   // ========================
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
 
-        // 1️⃣ Movie details
-        const movieRes = await api.get(`/movies/${movieId}`);
-        if (movieRes.data?.success) {
-          setMovie(movieRes.data.movie);
-        } else {
-          setMovie(null);
-        }
+      // 1️⃣ Movie details (NOT city-based)
+      const movieRes = await api.get(
+        `/movies/${movieId}`
+      );
 
-        // 2️⃣ Shows by movie + date
-        if (!selectedDate) {
-          setShows([]);
-          setLoading(false);
-          return;
-        }
-
-        const showRes = await api.get(`/shows`, {
-          params: { movieId, date: selectedDate },
-        });
-
-        if (showRes.data?.success) {
-          setShows(showRes.data.shows || []);
-        } else {
-          setShows([]);
-        }
-      } catch (err) {
-        console.log("Error:", err?.response?.data || err.message);
-        toast.error("Failed to load shows");
-        setShows([]);
-      } finally {
-        setLoading(false);
+      if (movieRes.data?.success) {
+        setMovie(movieRes.data.movie);
+      } else {
+        setMovie(null);
       }
-    };
 
-    fetchData();
-  }, [movieId, selectedDate]);
+      // 2️⃣ Shows by movie + date (city-based)
+      if (!selectedDate || !selectedCity) {
+        setShows([]);
+        return;
+      }
+
+      const showRes = await api.get(
+        `/shows`,
+        {
+          params: {
+            movieId,
+            date: selectedDate,
+          },
+        }
+      );
+
+      if (showRes.data?.success) {
+        setShows(showRes.data.shows || []);
+      } else {
+        setShows([]);
+      }
+    } catch (err) {
+      console.log(
+        "Error:",
+        err?.response?.data ||
+          err.message
+      );
+
+      toast.error(
+        "Failed to load shows"
+      );
+
+      setShows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, [
+  movieId,
+  selectedDate,
+  selectedCity, // ✅ triggers rerender on city change
+]);
 
   // ========================
   // Group shows by theatre
