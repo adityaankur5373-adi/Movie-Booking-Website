@@ -67,7 +67,7 @@ const AddShows = () => {
     if (!tId) return;
 
     try {
-      const { data } = await api.get(`/threater/${tId}`);
+      const { data } = await api.get(`/threater/admin/${tId}`);
 
       if (data?.success) {
         setScreens(data?.theatre?.screenList || []);
