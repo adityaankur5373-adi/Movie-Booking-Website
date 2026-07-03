@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/api";
 import Loading from "../components/Loading";
 import { useQuery } from "@tanstack/react-query";
-
+import { useLocationStore } from "../store/useLocationStore";
 const fetchTheatres = async () => {
   const { data } = await api.get("/threater");
   if (!data?.success) return [];
@@ -13,17 +13,18 @@ const fetchTheatres = async () => {
 
 const Theatres = () => {
   const navigate = useNavigate();
-
-  const {
-    data: theatres = [],
-    isLoading,
-    refetch,
-    isError,
-  } = useQuery({
-    queryKey: ["theatres"],
-    queryFn: fetchTheatres,
-    staleTime: 2 * 60 * 1000,
-  });
+  const { selectedCity } = useLocationStore();
+ const {
+  data: theatres = [],
+  isLoading,
+  refetch,
+  isError,
+} = useQuery({
+  queryKey: ["theatres", selectedCity],
+  queryFn: fetchTheatres,
+  enabled: !!selectedCity,
+  staleTime: 2 * 60 * 1000,
+});
 
   if (isLoading) return <Loading />;
 
