@@ -39,7 +39,7 @@ const fetchFeaturedTrailers = async () => {
 };
 
 const TrailerSection = () => {
-  const [currentTrailer, setCurrentTrailer] = useState(null);
+
 const { selectedCity } =
     useLocationStore();
 
