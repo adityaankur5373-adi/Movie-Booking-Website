@@ -134,18 +134,15 @@ const Navbar = () => {
         <div className="flex items-center gap-3">
           {/* CITY BUTTON */}
           <button
-            onClick={() =>
-              setShowCityModal(true)
-            }
-            className="flex items-center gap-1 text-sm text-white/90 transition hover:text-white"
-          >
-            <MapPin className="h-4 w-4 text-primary" />
+  onClick={() => setShowCityModal(true)}
+  className="flex items-center gap-1 text-sm text-white/90 transition hover:text-white"
+>
+  <MapPin className="h-4 w-4 text-primary" />
 
-            <span className="max-w-[80px] truncate hidden sm:inline">
-              {selectedCity ||
-                "Select City"}
-            </span>
-          </button>
+  <span className="max-w-[60px] truncate">
+    {selectedCity || "City"}
+  </span>
+</button>
 
           {/* AUTH */}
           {isAuthenticated ? (
