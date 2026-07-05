@@ -99,7 +99,7 @@ export const getShowsByMovieAndDate = asyncHandler(async (req, res) => {
 // GET /api/shows/:showId
 // =====================================
 export const getShowById = asyncHandler(async (req, res) => {
- 
+ await expireOldBookings(prisma);
 
   const { showId } = req.params;
      if (!showId) {
