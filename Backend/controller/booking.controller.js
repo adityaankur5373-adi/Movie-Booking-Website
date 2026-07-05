@@ -162,42 +162,66 @@ export const createBooking = async (req, res, next) => {
     const { showId, seats } = req.body;
     const userId = req.user.id;
 
+    // =========================
+    // 1. Validation
+    // =========================
     if (!showId || !Array.isArray(seats) || seats.length === 0) {
       return res.status(400).json({
         message: "Invalid input",
       });
     }
 
-    // Lock time: 8 minutes
+    // =========================
+    // 2. Lock expiry (8 minutes)
+    // =========================
     const LOCK_TTL_SECONDS = 8 * 60;
+
     const expiresAt = new Date(
       Date.now() + LOCK_TTL_SECONDS * 1000
     );
 
-    // Redis seat locking (NOT caching)
+    // Store only locks created by THIS request
+    const myLockedSeats = [];
+
+    // =========================
+    // 3. Redis Locking
+    // =========================
     for (const seatId of seats) {
       const key = `seat_lock:${showId}:${seatId}`;
 
       const locked = await redis.set(
         key,
         userId,
-        "NX",
-        "EX",
+        "NX", // Only if key does not exist
+        "EX", // Auto-expire
         LOCK_TTL_SECONDS
       );
 
+      console.log(
+        `[REDIS] ${seatId} ->`,
+        locked
+      );
+
+      // Seat already locked
       if (!locked) {
-        for (const s of seats) {
-          await redis.del(`seat_lock:${showId}:${s}`);
+        // Remove only seats locked by THIS request
+        for (const s of myLockedSeats) {
+          await redis.del(
+            `seat_lock:${showId}:${s}`
+          );
         }
 
         return res.status(409).json({
           message: `Seat ${seatId} is already locked`,
         });
       }
+
+      myLockedSeats.push(seatId);
     }
 
-    // Create pending booking
+    // =========================
+    // 4. Create Booking
+    // =========================
     const booking = await prisma.booking.create({
       data: {
         userId,
@@ -209,7 +233,9 @@ export const createBooking = async (req, res, next) => {
       },
     });
 
-    // DB lock (final authority)
+    // =========================
+    // 5. Create DB Seat Locks
+    // =========================
     try {
       await prisma.$transaction(
         seats.map((seatId) =>
@@ -225,8 +251,11 @@ export const createBooking = async (req, res, next) => {
         )
       );
     } catch (err) {
-      for (const seatId of seats) {
-        await redis.del(`seat_lock:${showId}:${seatId}`);
+      // Remove Redis locks if DB fails
+      for (const seatId of myLockedSeats) {
+        await redis.del(
+          `seat_lock:${showId}:${seatId}`
+        );
       }
 
       if (err?.code === "P2002") {
@@ -239,6 +268,9 @@ export const createBooking = async (req, res, next) => {
       throw err;
     }
 
+    // =========================
+    // 6. Success
+    // =========================
     return res.status(200).json({
       message: "Seats locked successfully",
       bookingId: booking.id,
