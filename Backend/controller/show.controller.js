@@ -112,7 +112,6 @@ export const getShowById = asyncHandler(async (req, res) => {
     throw new AppError("Please select a city", 400);
   }
 
-     await expireOldBookings(prisma);
    const show = await prisma.show.findFirst({
     where: {
       id: showId,
